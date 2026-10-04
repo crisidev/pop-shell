@@ -233,7 +233,7 @@ export class AutoTiler {
         }
 
         this.forest.stacks.truncate(0);
-        ext.show_border_on_focused();
+        ext.schedule_border_update();
     }
 
     /** Detaches the window from a tiling branch, if it is attached to one. */

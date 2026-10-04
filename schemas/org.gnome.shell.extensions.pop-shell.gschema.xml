@@ -13,6 +13,33 @@
             <summary>Border radius for active window hint, in pixels</summary>
         </key>
 
+        <key type="u" name="active-hint-border-width">
+            <default>3</default>
+            <range min="1" max="10"/>
+            <summary>Border width for window hints, in pixels</summary>
+        </key>
+
+        <key type="b" name="inactive-hint">
+            <default>false</default>
+            <summary>Show a hint around unfocused windows</summary>
+        </key>
+
+        <key type="s" name="inactive-hint-color-rgba">
+            <default>'rgba(251, 184, 108, 0.3)'</default>
+            <summary>Start (top-left) color of the unfocused window hint, in RGBA</summary>
+        </key>
+
+        <key type="s" name="inactive-hint-color-end-rgba">
+            <default>''</default>
+            <summary>End (bottom-right) color of the unfocused window hint, in RGBA. Empty for a solid color</summary>
+        </key>
+
+        <key type="d" name="inactive-dim">
+            <default>0.0</default>
+            <range min="0.0" max="0.8"/>
+            <summary>Opacity of the black overlay dimming unfocused windows (0 disables dimming)</summary>
+        </key>
+
         <key type="b" name="fullscreen-launcher">
             <default>false</default>
             <summary>Allow showing launcher above fullscreen windows</summary>
@@ -276,6 +303,10 @@
         <key type="s" name="hint-color-rgba">
             <default>'rgba(251, 184, 108, 1)'</default>
             <summary>The current active-hint-color in RGBA</summary>
+        </key>
+        <key type="s" name="hint-color-end-rgba">
+            <default>''</default>
+            <summary>End (bottom-right) color of the active hint gradient, in RGBA. Empty for a solid color</summary>
         </key>
         <key type="u" name="log-level">
             <default>0</default>

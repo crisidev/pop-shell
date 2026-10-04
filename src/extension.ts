@@ -23,6 +23,7 @@ import * as stack from './stack.js';
 import * as add_exception from './dialog_add_exception.js';
 import * as exec from './executor.js';
 import * as dbus_service from './dbus_service.js';
+import { BorderStyle } from './border.js';
 import * as scheduler from './scheduler.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import type { Entity } from './ecs.js';
@@ -41,6 +42,7 @@ const Movement = movement.Movement;
 
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
+import Gdk from 'gi://Gdk';
 import St from 'gi://St';
 import Shell from 'gi://Shell';
 import Meta from 'gi://Meta';
@@ -151,6 +153,12 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     /** The current scaling factor in GNOME Shell */
     dpi: number = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+
+    /** Precomputed border styles for focused and unfocused windows */
+    border_styles: { active: BorderStyle; inactive: BorderStyle } = this.create_border_styles();
+
+    /** Pending BEFORE_REDRAW later which refreshes every border once */
+    private border_later: number | null = null;
 
     drag_signal: null | SignalID = null;
 
@@ -893,7 +901,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         this.unmaximize_workspace(win);
 
-        this.show_border_on_focused();
+        this.schedule_border_update();
 
         if (this.auto_tiler && win.is_tilable(this) && this.prev_focused[0] !== null) {
             let prev = this.windows.get(this.prev_focused[0]);
@@ -961,16 +969,68 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
     }
 
-    show_border_on_focused() {
-        this.hide_all_borders();
-        const focus = this.focus_window();
-        if (focus) focus.show_border();
+    /** Refreshes every window's border, at most once per frame */
+    schedule_border_update() {
+        if (this.border_later !== null) return;
+
+        this.border_later = global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
+            this.border_later = null;
+            this.update_borders();
+            return false;
+        });
     }
 
-    hide_all_borders() {
+    update_borders() {
+        const focus = this.focus_window();
         for (const win of this.windows.values()) {
-            win.hide_border();
+            win.refresh_border(win === focus);
         }
+    }
+
+    destroy_all_borders() {
+        if (this.border_later !== null) {
+            global.compositor.get_laters().remove(this.border_later);
+            this.border_later = null;
+        }
+
+        for (const win of this.windows.values()) {
+            win.border?.destroy();
+            win.border = null;
+        }
+    }
+
+    create_border_styles(): { active: BorderStyle; inactive: BorderStyle } {
+        const s = this.settings;
+        const scaling = s.text_scaling_factor();
+        const width = Math.max(1, Math.round(s.active_hint_border_width() * scaling));
+        const radius = Math.round(s.active_hint_border_radius() * scaling);
+
+        return {
+            active: new BorderStyle(s.hint_color_rgba(), s.hint_color_end_rgba(), width, radius, this.dpi),
+            inactive: new BorderStyle(
+                s.inactive_hint_color_rgba(),
+                s.inactive_hint_color_end_rgba(),
+                width,
+                radius,
+                this.dpi,
+            ),
+        };
+    }
+
+    /** Rebuilds border styles after a settings or scale change */
+    update_border_styles() {
+        this.border_styles = this.create_border_styles();
+        this.update_overlay_color();
+        this.schedule_border_update();
+    }
+
+    /** Tints the tiling preview overlay with the hint color, at a lower opacity */
+    update_overlay_color() {
+        const color = this.settings.hint_color_rgba();
+        const gdk = new Gdk.RGBA();
+        gdk.parse(utils.is_dark(color) ? 'rgba(53, 132, 228, 0.3)' : color);
+        gdk.alpha = 0.3;
+        this.overlay.set_style(`background: ${gdk.to_string()}`);
     }
 
     maximized_on_active_display(): boolean {
@@ -1583,13 +1643,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     /** Handle window minimization notifications */
     on_minimize(win: Window.ShellWindow) {
-        if (this.focus_window() == win && this.settings.active_hint()) {
-            if (win.meta.minimized) {
-                win.hide_border();
-            } else {
-                this.show_border_on_focused();
-            }
-        }
+        this.schedule_border_update();
 
         if (this.auto_tiler) {
             if (win.meta.minimized) {
@@ -1910,7 +1964,24 @@ export class Ext extends Ecs.System<ExtEvent> {
                 case 'active-hint':
                     if (indicator) indicator.toggle_active.setToggleState(this.settings.active_hint());
 
-                    this.show_border_on_focused();
+                    this.schedule_border_update();
+                    break;
+                case 'inactive-hint':
+                    if (indicator) indicator.toggle_inactive.setToggleState(this.settings.inactive_hint());
+
+                    this.schedule_border_update();
+                    break;
+                case 'inactive-dim':
+                    this.schedule_border_update();
+                    break;
+                case 'active-hint-border-radius':
+                case 'active-hint-border-width':
+                case 'hint-color-rgba':
+                case 'hint-color-end-rgba':
+                case 'inactive-hint-color-rgba':
+                case 'inactive-hint-color-end-rgba':
+                    this.update_border_styles();
+                    break;
                 case 'gap-inner':
                     this.on_gap_inner();
                     break;
@@ -1922,7 +1993,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                     break;
                 case 'smart-gaps':
                     this.on_smart_gap();
-                    this.show_border_on_focused();
+                    this.schedule_border_update();
                     break;
                 case 'show-skip-taskbar':
                     if (this.settings.show_skiptaskbar()) {
@@ -1932,6 +2003,12 @@ export class Ext extends Ecs.System<ExtEvent> {
                     }
             }
         });
+
+        if (this.settings.int) {
+            this.connect(this.settings.int, 'changed::text-scaling-factor', () => {
+                this.update_border_styles();
+            });
+        }
 
         if (this.settings.mutter) {
             this.connect(this.settings.mutter, 'changed::workspaces-only-on-primary', () => {
@@ -1994,7 +2071,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                     if (window && window.same_monitor() && window.same_workspace() && !window.meta.minimized) {
                         window.activate(false);
                     } else {
-                        this.hide_all_borders();
+                        this.schedule_border_update();
                     }
                 };
 
@@ -2072,7 +2149,11 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
 
         this.connect(wim, 'switch-workspace', () => {
-            this.hide_all_borders();
+            this.schedule_border_update();
+        });
+
+        this.connect(display, 'restacked', () => {
+            this.schedule_border_update();
         });
 
         this.connect(workspace_manager, 'active-workspace-changed', () => {
@@ -2089,7 +2170,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         // Bind show desktop and remove the active hint
         this.connect(workspace_manager, 'showing-desktop-changed', () => {
-            this.hide_all_borders();
+            this.schedule_border_update();
             this.prev_focused = [null, null];
         });
 
@@ -2214,7 +2295,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     auto_tile_off() {
         this.settings.set_edge_tiling(true);
-        this.hide_all_borders();
+        this.schedule_border_update();
 
         if (this.auto_tiler) {
             this.unregister_storage(this.auto_tiler.attached);
@@ -2226,15 +2307,12 @@ export class Ext extends Ecs.System<ExtEvent> {
 
             this.button.icon.gicon = this.button_gio_icon_auto_off; // type: Gio.Icon
 
-            if (this.settings.active_hint()) {
-                this.show_border_on_focused();
-            }
         }
     }
 
     auto_tile_on() {
         this.settings.set_edge_tiling(false);
-        this.hide_all_borders();
+        this.schedule_border_update();
 
         if (indicator) indicator.toggle_tiled.setToggleState(true);
 
@@ -2538,6 +2616,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         this.update_inner_gap();
         this.update_outer_gap(diff);
+        this.update_border_styles();
     }
 
     update_snapped() {
@@ -2708,6 +2787,7 @@ export default class PopShellExtension extends Extension {
         disable_window_attention_handler();
 
         layoutManager.addChrome(ext.overlay);
+        ext.update_overlay_color();
 
         if (!indicator) {
             indicator = new PanelSettings.Indicator(ext);
@@ -2734,7 +2814,7 @@ export default class PopShellExtension extends Extension {
             ext.signals_remove();
             ext.exit_modes();
             ext.stop_launcher_services();
-            ext.hide_all_borders();
+            ext.destroy_all_borders();
             ext.window_search.remove_injections();
 
             layoutManager.removeChrome(ext.overlay);

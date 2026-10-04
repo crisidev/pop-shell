@@ -25,7 +25,9 @@ export class Indicator {
     toggle_tiled: any;
     toggle_titles: null | any;
     toggle_active: any;
+    toggle_inactive: any;
     border_radius: any;
+    border_width: any;
 
     entry_gaps: any;
 
@@ -62,6 +64,22 @@ export class Indicator {
             ext.settings.set_active_hint(toggle.state);
         });
 
+        this.toggle_inactive = toggle(_('Show Inactive Hint'), ext.settings.inactive_hint(), (toggle) => {
+            ext.settings.set_inactive_hint(toggle.state);
+        });
+
+        this.border_width = number_entry(
+            _('Border Width'),
+            {
+                value: ext.settings.active_hint_border_width(),
+                min: 1,
+                max: 10,
+            },
+            (value) => {
+                ext.settings.set_active_hint_border_width(value);
+            },
+        );
+
         this.entry_gaps = number_entry(_('Gaps'), ext.settings.gap_inner(), (value) => {
             ext.settings.set_gap_inner(value);
             ext.settings.set_gap_outer(value);
@@ -93,6 +111,8 @@ export class Indicator {
         }
 
         bm.addMenuItem(this.toggle_active);
+        bm.addMenuItem(this.toggle_inactive);
+        bm.addMenuItem(this.border_width);
         bm.addMenuItem(this.border_radius);
 
         // CSS Selector
@@ -279,6 +299,9 @@ function number_entry(
             text.set_text(input.substr(0, input.length - 1));
             parsed = 0;
         }
+
+        // Skip values outside the key's range while the user is still typing
+        if ((min !== undefined && parsed < min) || (max !== undefined && parsed > max)) return;
 
         callback(parsed);
     });

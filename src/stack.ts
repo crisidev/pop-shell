@@ -704,7 +704,7 @@ export class Stack {
     }
 
     private window_changed() {
-        this.ext.show_border_on_focused();
+        this.ext.schedule_border_update();
     }
 
     private actor_exec(comp: number, entity: Entity, func: (window: Clutter.Actor) => void) {

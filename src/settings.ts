@@ -12,6 +12,9 @@ interface Settings extends GObject.Object {
     get_uint(key: string): number;
     set_uint(key: string, value: number): void;
 
+    get_double(key: string): number;
+    set_double(key: string, value: number): void;
+
     get_string(key: string): string;
     set_string(key: string, value: string): void;
 
@@ -51,6 +54,11 @@ function settings_new_schema(schema: string): Settings {
 
 const ACTIVE_HINT = 'active-hint';
 const ACTIVE_HINT_BORDER_RADIUS = 'active-hint-border-radius';
+const ACTIVE_HINT_BORDER_WIDTH = 'active-hint-border-width';
+const INACTIVE_HINT = 'inactive-hint';
+const INACTIVE_HINT_COLOR_RGBA = 'inactive-hint-color-rgba';
+const INACTIVE_HINT_COLOR_END_RGBA = 'inactive-hint-color-end-rgba';
+const INACTIVE_DIM = 'inactive-dim';
 const STACKING_WITH_MOUSE = 'stacking-with-mouse';
 const COLUMN_SIZE = 'column-size';
 const EDGE_TILING = 'edge-tiling';
@@ -63,12 +71,17 @@ const SMART_GAPS = 'smart-gaps';
 const SNAP_TO_GRID = 'snap-to-grid';
 const TILE_BY_DEFAULT = 'tile-by-default';
 const HINT_COLOR_RGBA = 'hint-color-rgba';
+const HINT_COLOR_END_RGBA = 'hint-color-end-rgba';
 const DEFAULT_RGBA_COLOR = 'rgba(251, 184, 108, 1)'; //pop-orange
 const LOG_LEVEL = 'log-level';
 const SHOW_SKIPTASKBAR = 'show-skip-taskbar';
 const MOUSE_CURSOR_FOLLOWS_ACTIVE_WINDOW = 'mouse-cursor-follows-active-window';
 const MOUSE_CURSOR_FOCUS_LOCATION = 'mouse-cursor-focus-location';
 const MAX_WINDOW_WIDTH = 'max-window-width';
+
+function valid_color_or(rgba: string, fallback: string): string {
+    return rgba && new Gdk.RGBA().parse(rgba) ? rgba : fallback;
+}
 
 export class ExtensionSettings {
     ext: Settings = settings_new_schema('org.gnome.shell.extensions.pop-shell');
@@ -84,6 +97,32 @@ export class ExtensionSettings {
 
     active_hint_border_radius(): number {
         return this.ext.get_uint(ACTIVE_HINT_BORDER_RADIUS);
+    }
+
+    active_hint_border_width(): number {
+        return this.ext.get_uint(ACTIVE_HINT_BORDER_WIDTH);
+    }
+
+    inactive_hint(): boolean {
+        return this.ext.get_boolean(INACTIVE_HINT);
+    }
+
+    inactive_hint_color_rgba(): string {
+        return valid_color_or(this.ext.get_string(INACTIVE_HINT_COLOR_RGBA), DEFAULT_RGBA_COLOR);
+    }
+
+    /** End color of the inactive hint gradient, or the start color if unset */
+    inactive_hint_color_end_rgba(): string {
+        return valid_color_or(this.ext.get_string(INACTIVE_HINT_COLOR_END_RGBA), this.inactive_hint_color_rgba());
+    }
+
+    inactive_dim(): number {
+        return this.ext.get_double(INACTIVE_DIM);
+    }
+
+    /** Multiplier applied to border sizes, following the desktop's text scaling */
+    text_scaling_factor(): number {
+        return this.int ? this.int.get_double('text-scaling-factor') : 1;
     }
 
     stacking_with_mouse(): boolean {
@@ -119,6 +158,11 @@ export class ExtensionSettings {
         }
 
         return rgba;
+    }
+
+    /** End color of the active hint gradient, or the start color if unset */
+    hint_color_end_rgba(): string {
+        return valid_color_or(this.ext.get_string(HINT_COLOR_END_RGBA), this.hint_color_rgba());
     }
 
     theme(): string {
@@ -186,6 +230,14 @@ export class ExtensionSettings {
 
     set_active_hint_border_radius(set: number) {
         this.ext.set_uint(ACTIVE_HINT_BORDER_RADIUS, set);
+    }
+
+    set_active_hint_border_width(set: number) {
+        this.ext.set_uint(ACTIVE_HINT_BORDER_WIDTH, set);
+    }
+
+    set_inactive_hint(set: boolean) {
+        this.ext.set_boolean(INACTIVE_HINT, set);
     }
 
     set_stacking_with_mouse(set: boolean) {

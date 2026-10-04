@@ -7,6 +7,7 @@ interface Global {
     log(msg: string): void;
     logError(error: any): void;
 
+    compositor: Meta.Compositor;
     display: Meta.Display;
     run_at_leisure(func: () => void): void;
     session_mode: string;
@@ -194,6 +195,7 @@ declare namespace Clutter {
         hide(): void;
         get_child_at_index(nth: number): Clutter.Actor | null;
         get_n_children(): number;
+        get_next_sibling(): Clutter.Actor | null;
         get_parent(): Clutter.Actor | null;
         get_stage(): Clutter.Actor | null;
         get_transition(param: string): any | null;
@@ -304,6 +306,7 @@ declare namespace Meta {
         is_on_all_workspaces(): boolean;
         is_override_redirect(): boolean;
         is_skip_taskbar(): boolean;
+        located_on_workspace(workspace: Workspace): boolean;
         make_above(): void;
         make_fullscreen(): void;
         maximize(flags: MaximizeFlags): void;
@@ -313,6 +316,15 @@ declare namespace Meta {
         skip_taskbar: boolean;
         unmaximize(flags: any): void;
         unminimize(): void;
+    }
+
+    interface Laters extends GObject.Object {
+        add(when: number, func: () => boolean): number;
+        remove(id: number): void;
+    }
+
+    interface Compositor extends GObject.Object {
+        get_laters(): Laters;
     }
 
     interface WindowActor extends Clutter.Actor {

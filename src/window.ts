@@ -10,41 +10,22 @@ import type { Ext } from './extension.js';
 import type { Rectangle } from './rectangle.js';
 import * as scheduler from './scheduler.js';
 import * as focus from './focus.js';
+import { Border } from './border.js';
 
-import Gdk from 'gi://Gdk';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
-import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const { OnceCell } = once_cell;
 
 export var window_tracker = Shell.WindowTracker.get_default();
 
-/** Contains SourceID of a restack operation. Used to prevent multiple restacks. */
-let SCHEDULED_RESTACK: number | null = null;
-
-/** Contains SourceID of an active hint operation. */
-let ACTIVE_HINT_SHOW_ID: number | null = null;
-
 const WM_TITLE_BLACKLIST: Array<string> = [
     'Firefox',
     'Nightly', // Firefox Nightly
     'Tor Browser',
 ];
-
-enum RESTACK_STATE {
-    RAISED,
-    WORKSPACE_CHANGED,
-    NORMAL,
-}
-
-enum RESTACK_SPEED {
-    RAISED = 430,
-    WORKSPACE_CHANGED = 300,
-    NORMAL = 200,
-}
 
 interface X11Info {
     normal_hints: once_cell.OnceCell<lib.SizeHint | null>;
@@ -70,9 +51,7 @@ export class ShellWindow {
     // True if this window is currently smart-gapped
     smart_gapped: boolean = false;
 
-    border: null | St.Bin = new St.Bin({
-        style_class: 'pop-shell-active-hint pop-shell-border-normal',
-    });
+    border: null | Border = new Border();
 
     prev_rect: null | Rectangular = null;
 
@@ -85,8 +64,6 @@ export class ShellWindow {
         wm_role_: new OnceCell(),
         xid_: new OnceCell(),
     };
-
-    private border_size = 0;
 
     constructor(entity: Entity, window: Meta.Window, window_app: any, ext: Ext) {
         this.window_app = window_app;
@@ -113,15 +90,10 @@ export class ShellWindow {
         }
 
         this.bind_window_events();
-        this.bind_hint_events();
 
-        if (this.border) global.window_group.add_child(this.border);
+        if (this.border) global.window_group.add_child(this.border.actor);
 
-        this.hide_border();
-        this.restack();
-        this.update_border_layout();
-
-        if (this.meta.get_compositor_private()?.get_stage()) this.on_style_changed();
+        ext.schedule_border_update();
     }
 
     activate(move_mouse: boolean = true): void {
@@ -152,58 +124,6 @@ export class ShellWindow {
                     this.window_raised();
                 }),
             );
-    }
-
-    private bind_hint_events() {
-        if (!this.border) return;
-
-        let settings = this.ext.settings;
-        let change_id = settings.ext.connect('changed', (_, key) => {
-            if (this.border) {
-                if (key === 'hint-color-rgba') {
-                    this.update_hint_colors();
-                }
-            }
-            return false;
-        });
-
-        this.border.connect('destroy', () => {
-            settings.ext.disconnect(change_id);
-        });
-        this.border.connect('style-changed', () => {
-            this.on_style_changed();
-        });
-
-        this.update_hint_colors();
-    }
-
-    /**
-     * Adjust the colors for:
-     * - border hint
-     * - overlay
-     */
-    private update_hint_colors() {
-        let settings = this.ext.settings;
-        const color_value = settings.hint_color_rgba();
-
-        if (this.ext.overlay) {
-            const gdk = new Gdk.RGBA();
-            // TODO Probably move overlay color/opacity to prefs.js in future,
-            // For now mimic the hint color with lower opacity
-            const overlay_alpha = 0.3;
-            const orig_overlay = 'rgba(53, 132, 228, 0.3)';
-            gdk.parse(color_value);
-
-            if (utils.is_dark(gdk.to_string())) {
-                // too dark, use the blue overlay
-                gdk.parse(orig_overlay);
-            }
-
-            gdk.alpha = overlay_alpha;
-            this.ext.overlay.set_style(`background: ${gdk.to_string()}`);
-        }
-
-        this.update_border_style();
     }
 
     cmdline(): string | null {
@@ -359,8 +279,6 @@ export class ShellWindow {
             return;
         }
 
-        this.hide_border();
-
         const max_width = ext.settings.max_window_width();
         if (max_width > 0 && rect.width > max_width) {
             rect.x += (rect.width - max_width) / 2;
@@ -381,20 +299,11 @@ export class ShellWindow {
 
             ext.register({ tag: 2, window: this, kind: { tag: 1 } });
             if (on_complete) ext.register_fn(on_complete);
-            if (meta.appears_focused) {
-                this.update_border_layout();
-                ext.show_border_on_focused();
-            }
         }
     }
 
     name(ext: Ext): string {
         return ext.names.get_or(this.entity, () => 'unknown');
-    }
-
-    private on_style_changed() {
-        if (!this.border) return;
-        this.border_size = this.border.get_theme_node().get_border_width(St.Side.TOP);
     }
 
     rect(): Rectangle {
@@ -445,46 +354,47 @@ export class ShellWindow {
         });
     }
 
-    show_border() {
-        if (!this.border) return;
+    /** True if the window is on screen in a state where it may carry a border or dim overlay */
+    private border_base_permitted(): boolean {
+        const actor = this.meta.get_compositor_private();
+        if (!this.border || !actor || this.destroying) return false;
 
-        this.restack();
-        this.update_border_style();
-        if (this.ext.settings.active_hint()) {
-            let border = this.border;
+        return (
+            actor.visible &&
+            actor.get_parent() === this.border.actor.get_parent() &&
+            !this.meta.minimized &&
+            !this.meta.is_fullscreen() &&
+            (!this.is_single_max_screen() || this.is_snap_edge()) &&
+            this.meta.located_on_workspace(global.workspace_manager.get_active_workspace())
+        );
+    }
 
-            const permitted = () => {
-                return (
-                    this.actor_exists() &&
-                    this.ext.focus_window() == this &&
-                    !this.meta.is_fullscreen() &&
-                    (!this.is_single_max_screen() || this.is_snap_edge()) &&
-                    !this.meta.minimized
-                );
-            };
+    /**
+     * Shows, styles, lays out and restacks this window's border and dim
+     * overlay for the given focus state. Called from `Ext.update_borders`.
+     */
+    refresh_border(focused: boolean) {
+        const border = this.border;
+        if (!border) return;
 
-            if (permitted()) {
-                if (this.meta.appears_focused) {
-                    border.show();
+        const settings = this.ext.settings;
+        const base = this.border_base_permitted();
+        const ring = base && (focused ? settings.active_hint() : settings.inactive_hint());
+        const dim = base && !focused ? settings.inactive_dim() : 0;
 
-                    // Focus will be re-applied to fix windows moving across workspaces
-                    let applications = 0;
-
-                    // Ensure that the border is shown
-                    if (ACTIVE_HINT_SHOW_ID !== null) GLib.source_remove(ACTIVE_HINT_SHOW_ID);
-                    ACTIVE_HINT_SHOW_ID = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => {
-                        if ((applications > 4 && !this.same_workspace()) || !permitted()) {
-                            ACTIVE_HINT_SHOW_ID = null;
-                            return GLib.SOURCE_REMOVE;
-                        }
-
-                        applications += 1;
-                        border.show();
-                        return GLib.SOURCE_CONTINUE;
-                    });
-                }
-            }
+        if (!ring && !(base && settings.inactive_dim() > 0)) {
+            border.hide();
+            border.set_dim(0, false);
+            return;
         }
+
+        const styles = this.ext.border_styles;
+        border.set_ring_visible(ring);
+        border.set_style(focused ? styles.active : styles.inactive);
+        this.update_border_layout();
+        border.set_dim(dim, true);
+        border.show();
+        this.restack_border();
     }
 
     same_workspace() {
@@ -500,166 +410,57 @@ export class ShellWindow {
         return this.meta.get_monitor() === global.display.get_current_monitor();
     }
 
-    /**
-     * Sort the window group/always top group with each window border
-     * @param updateState NORMAL, RAISED, WORKSPACE_CHANGED
-     */
-    restack(updateState: RESTACK_STATE = RESTACK_STATE.NORMAL) {
-        this.update_border_layout();
-        if (this.meta.is_fullscreen() || (this.is_single_max_screen() && !this.is_snap_edge()) || this.meta.minimized) {
-            this.hide_border();
+    /** Keeps the border directly above its window (and its stack tabs), so windows covering it cover the border too */
+    restack_border() {
+        const border = this.border?.actor;
+        const actor = this.meta.get_compositor_private();
+        if (!border || !actor) return;
+
+        const parent = actor.get_parent();
+        if (!parent || border.get_parent() !== parent) return;
+
+        let above: Clutter.Actor = actor;
+        if (this.stack !== null) {
+            const tabs = this.ext.auto_tiler?.forest.stacks.get(this.stack)?.widgets?.tabs;
+            if (tabs && actor.get_next_sibling() === tabs) above = tabs;
         }
 
-        let restackSpeed = RESTACK_SPEED.NORMAL;
-
-        switch (updateState) {
-            case RESTACK_STATE.NORMAL:
-                restackSpeed = RESTACK_SPEED.NORMAL;
-                break;
-            case RESTACK_STATE.RAISED:
-                restackSpeed = RESTACK_SPEED.RAISED;
-                break;
-            case RESTACK_STATE.WORKSPACE_CHANGED:
-                restackSpeed = RESTACK_SPEED.WORKSPACE_CHANGED;
-                break;
-        }
-
-        let restacks = 0;
-
-        const action = () => {
-            const count = restacks;
-            restacks += 1;
-
-            if (!this.actor_exists && count === 0) return true;
-
-            if (count === 3) {
-                if (SCHEDULED_RESTACK !== null) GLib.source_remove(SCHEDULED_RESTACK);
-                SCHEDULED_RESTACK = null;
-            }
-
-            const border = this.border;
-            const actor = this.meta.get_compositor_private();
-            const win_group = global.window_group;
-
-            if (actor && border && win_group) {
-                this.update_border_layout();
-                // move the border above the window group first
-                win_group.set_child_above_sibling(border, null);
-
-                if (this.always_top_windows.length > 0) {
-                    // honor the always-top windows
-                    for (const above_actor of this.always_top_windows) {
-                        if (actor != above_actor) {
-                            if (border.get_parent() === above_actor.get_parent()) {
-                                win_group.set_child_below_sibling(border, above_actor);
-                            }
-                        }
-                    }
-
-                    // Move the border above the current window actor
-                    if (border.get_parent() === actor.get_parent()) {
-                        win_group.set_child_above_sibling(border, actor);
-                    }
-                }
-
-                // Honor transient windows
-                for (const window of this.ext.windows.values()) {
-                    const parent = window.meta.get_transient_for();
-                    const window_actor = window.meta.get_compositor_private();
-                    if (!parent || !window_actor) continue;
-                    const parent_actor = parent.get_compositor_private();
-                    if (!parent_actor && parent_actor !== actor) continue;
-                    win_group.set_child_below_sibling(border, window_actor);
-                }
-            }
-
-            return true;
-        };
-
-        if (SCHEDULED_RESTACK !== null) GLib.source_remove(SCHEDULED_RESTACK);
-        SCHEDULED_RESTACK = GLib.timeout_add(GLib.PRIORITY_LOW, restackSpeed, action);
-    }
-
-    get always_top_windows(): Clutter.Actor[] {
-        let above_windows: Clutter.Actor[] = new Array();
-
-        for (const actor of global.get_window_actors()) {
-            if (actor && actor.get_meta_window() && actor.get_meta_window().is_above()) above_windows.push(actor);
-        }
-
-        return above_windows;
+        if (above.get_next_sibling() !== border) parent.set_child_above_sibling(border, above);
     }
 
     hide_border() {
-        let b = this.border;
-        if (b) b.hide();
+        this.border?.hide();
     }
 
     update_border_layout() {
-        let { x, y, width, height } = this.meta.get_frame_rect();
-
         const border = this.border;
-        let borderSize = this.border_size;
+        if (!border) return;
 
-        if (border) {
-            if (!(this.is_max_screen() || this.is_snap_edge())) {
-                border.remove_style_class_name('pop-shell-border-maximize');
-            } else {
-                borderSize = 0;
-                border.add_style_class_name('pop-shell-border-maximize');
-            }
+        const frame = this.meta.get_frame_rect();
+        let { x, y, width, height } = frame;
 
-            const stack_number = this.stack;
-            let dimensions = null;
+        // Maximized and zero-gap windows draw their border inside the frame.
+        let border_size = this.is_max_screen() || this.is_snap_edge() ? 0 : this.ext.border_styles.active.width;
+        let tab_height = 0;
 
-            if (stack_number !== null) {
-                const stack = this.ext.auto_tiler?.forest.stacks.get(stack_number);
-                if (stack) {
-                    let stack_tab_height = stack.tabs_height;
-
-                    if (borderSize === 0 || this.grab) {
-                        // not in max screen state
-                        stack_tab_height = 0;
-                    }
-
-                    dimensions = [
-                        x - borderSize,
-                        y - stack_tab_height - borderSize,
-                        width + 2 * borderSize,
-                        height + stack_tab_height + 2 * borderSize,
-                    ];
-                }
-            } else {
-                dimensions = [x - borderSize, y - borderSize, width + 2 * borderSize, height + 2 * borderSize];
-            }
-
-            if (dimensions) {
-                [x, y, width, height] = dimensions;
-
-                const workspace = this.meta.get_workspace();
-
-                if (workspace === null) return;
-
-                const screen = workspace.get_work_area_for_monitor(this.meta.get_monitor());
-
-                if (screen) {
-                    width = Math.min(width, screen.x + screen.width);
-                    height = Math.min(height, screen.y + screen.height);
-                }
-
-                border.set_position(x, y);
-                border.set_size(width, height);
-            }
+        if (this.stack !== null && border_size !== 0 && !this.grab) {
+            const stack = this.ext.auto_tiler?.forest.stacks.get(this.stack);
+            if (stack) tab_height = stack.tabs_height;
         }
-    }
 
-    update_border_style() {
-        const { settings } = this.ext;
-        const color_value = settings.hint_color_rgba();
-        const radius_value = settings.active_hint_border_radius();
-        if (this.border) {
-            this.border.set_style(`border-color: ${color_value}; border-radius: ${radius_value}px;`);
+        x -= border_size;
+        y -= tab_height + border_size;
+        width += 2 * border_size;
+        height += tab_height + 2 * border_size;
+
+        const workspace = this.meta.get_workspace();
+        const screen = workspace?.get_work_area_for_monitor(this.meta.get_monitor());
+        if (screen) {
+            width = Math.min(width, screen.x + screen.width - x);
+            height = Math.min(height, screen.y + screen.height - y);
         }
+
+        border.set_geometry({ x, y, width, height }, frame);
     }
 
     private wm_class_changed() {
@@ -672,17 +473,15 @@ export class ShellWindow {
     }
 
     private window_changed() {
-        this.update_border_layout();
-        this.ext.show_border_on_focused();
+        this.ext.schedule_border_update();
     }
 
     private window_raised() {
-        this.restack(RESTACK_STATE.RAISED);
-        this.ext.show_border_on_focused();
+        this.ext.schedule_border_update();
     }
 
     private workspace_changed() {
-        this.restack(RESTACK_STATE.WORKSPACE_CHANGED);
+        this.ext.schedule_border_update();
     }
 }
 
