@@ -40,6 +40,22 @@
             <summary>Opacity of the black overlay dimming unfocused windows (0 disables dimming)</summary>
         </key>
 
+        <key type="b" name="float-above">
+            <default>true</default>
+            <summary>Keep floating windows above tiled windows</summary>
+        </key>
+
+        <key type="b" name="float-center">
+            <default>true</default>
+            <summary>Center floating windows on their monitor when they open</summary>
+        </key>
+
+        <key type="u" name="float-min-size">
+            <default>50</default>
+            <range min="0" max="100"/>
+            <summary>Minimum size of floating windows, as a percentage of the monitor's work area (0 disables)</summary>
+        </key>
+
         <key type="b" name="fullscreen-launcher">
             <default>false</default>
             <summary>Allow showing launcher above fullscreen windows</summary>

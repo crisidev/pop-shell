@@ -987,6 +987,49 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
     }
 
+    /**
+     * Floating windows stay on top until another window is clicked: focus
+     * moved by the pointer alone (sloppy focus) leaves them above, a click
+     * sends them back to normal stacking, and focusing them brings them
+     * back on top.
+     */
+    on_float_focus(focused: Window.ShellWindow, by_click: boolean) {
+        if (focused.made_above || focused.float_lowered) {
+            if (focused.float_lowered) {
+                focused.float_lowered = false;
+                focused.sync_float_above();
+            }
+            return;
+        }
+
+        if (!by_click) return;
+
+        let lowered = false;
+        for (const win of this.windows.values()) {
+            if (win.made_above) {
+                win.float_lowered = true;
+                win.sync_float_above();
+                lowered = true;
+            }
+        }
+
+        if (lowered) focused.meta.raise();
+    }
+
+    sync_all_float_above() {
+        for (const win of this.windows.values()) win.sync_float_above();
+    }
+
+    /** Hands always-on-top back to every window pop-shell made float above */
+    release_float_above() {
+        for (const win of this.windows.values()) {
+            if (win.made_above) {
+                win.made_above = false;
+                if (win.meta.is_above()) win.meta.unmake_above();
+            }
+        }
+    }
+
     destroy_all_borders() {
         if (this.border_later !== null) {
             global.compositor.get_laters().remove(this.border_later);
@@ -1974,6 +2017,9 @@ export class Ext extends Ecs.System<ExtEvent> {
                 case 'inactive-dim':
                     this.schedule_border_update();
                     break;
+                case 'float-above':
+                    this.sync_all_float_above();
+                    break;
                 case 'active-hint-border-radius':
                 case 'active-hint-border-width':
                 case 'hint-color-rgba':
@@ -2047,6 +2093,9 @@ export class Ext extends Ecs.System<ExtEvent> {
             if (screenShield?.locked) this.update_display_configuration(false);
 
             this.connect(display, 'notify::focus-window', () => {
+                // Read now: the button is released by the time the idle callback runs
+                const by_click = Lib.pointer_button_pressed();
+
                 // Disallow refocus if a modal window is active
                 if (Main.modalCount !== 0) {
                     const { actor } = Main.modalActorFocusStack[0];
@@ -2084,6 +2133,8 @@ export class Ext extends Ecs.System<ExtEvent> {
                         const shell_window = this.get_window(meta_window);
 
                         if (shell_window) {
+                            this.on_float_focus(shell_window, by_click);
+
                             // Avoid re-focusing a window that's already focused.
                             if (shell_window.entity !== this.prev_focused[1] && !shell_window.meta.minimized) {
                                 this.on_focused(shell_window);
@@ -2296,6 +2347,7 @@ export class Ext extends Ecs.System<ExtEvent> {
     auto_tile_off() {
         this.settings.set_edge_tiling(true);
         this.schedule_border_update();
+        this.register_fn(() => this.sync_all_float_above());
 
         if (this.auto_tiler) {
             this.unregister_storage(this.auto_tiler.attached);
@@ -2313,6 +2365,7 @@ export class Ext extends Ecs.System<ExtEvent> {
     auto_tile_on() {
         this.settings.set_edge_tiling(false);
         this.schedule_border_update();
+        this.register_fn(() => this.sync_all_float_above());
 
         if (indicator) indicator.toggle_tiled.setToggleState(true);
 
@@ -2689,7 +2742,18 @@ export class Ext extends Ecs.System<ExtEvent> {
                     grab_focus();
                     actor.disconnect(id);
                 });
+            } else if (!this.init && win.is_floating_toplevel()) {
+                let id = actor.connect('first-frame', () => {
+                    actor.disconnect(id);
+                    // Windows which keep themselves on top (such as launchers) place themselves
+                    if (!win.meta.is_above() && !win.is_maximized()) {
+                        win.place_floating();
+                    }
+                    win.sync_float_above();
+                    grab_focus();
+                });
             } else {
+                win.sync_float_above();
                 grab_focus();
             }
         }
@@ -2815,6 +2879,7 @@ export default class PopShellExtension extends Extension {
             ext.exit_modes();
             ext.stop_launcher_services();
             ext.destroy_all_borders();
+            ext.release_float_above();
             ext.window_search.remove_injections();
 
             layoutManager.removeChrome(ext.overlay);

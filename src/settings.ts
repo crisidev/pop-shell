@@ -62,6 +62,9 @@ const INACTIVE_DIM = 'inactive-dim';
 const STACKING_WITH_MOUSE = 'stacking-with-mouse';
 const COLUMN_SIZE = 'column-size';
 const EDGE_TILING = 'edge-tiling';
+const FLOAT_ABOVE = 'float-above';
+const FLOAT_CENTER = 'float-center';
+const FLOAT_MIN_SIZE = 'float-min-size';
 const FULLSCREEN_LAUNCHER = 'fullscreen-launcher';
 const GAP_INNER = 'gap-inner';
 const GAP_OUTER = 'gap-outer';
@@ -135,6 +138,18 @@ export class ExtensionSettings {
 
     dynamic_workspaces(): boolean {
         return this.mutter ? this.mutter.get_boolean('dynamic-workspaces') : false;
+    }
+
+    float_above(): boolean {
+        return this.ext.get_boolean(FLOAT_ABOVE);
+    }
+
+    float_center(): boolean {
+        return this.ext.get_boolean(FLOAT_CENTER);
+    }
+
+    float_min_size(): number {
+        return this.ext.get_uint(FLOAT_MIN_SIZE);
     }
 
     fullscreen_launcher(): boolean {

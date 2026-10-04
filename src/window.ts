@@ -51,6 +51,12 @@ export class ShellWindow {
     // True if this window is currently smart-gapped
     smart_gapped: boolean = false;
 
+    // True if pop-shell made this window always-on-top because it floats
+    made_above: boolean = false;
+
+    // True if this floating window was sent behind by clicking another window
+    float_lowered: boolean = false;
+
     border: null | Border = new Border();
 
     prev_rect: null | Rectangular = null;
@@ -469,6 +475,71 @@ export class ShellWindow {
             if (!this.meta.minimized) {
                 this.ext.auto_tiler?.auto_tile(this.ext, this, this.ext.init);
             }
+        }
+
+        this.sync_float_above();
+    }
+
+    /** True for normal top-level windows that pop-shell leaves floating while auto-tiling */
+    is_floating_toplevel(): boolean {
+        return (
+            this.ext.auto_tiler !== null &&
+            this.meta.window_type == Meta.WindowType.NORMAL &&
+            !this.is_transient() &&
+            !this.is_tilable(this.ext)
+        );
+    }
+
+    /**
+     * Keeps floating windows always-on-top, so that tiles raised by focus
+     * (e.g. sloppy focus with auto-raise) don't bury them. Only undoes the
+     * state pop-shell set itself, never one the user chose.
+     */
+    sync_float_above() {
+        const floating = this.is_floating_toplevel();
+        if (!floating) this.float_lowered = false;
+
+        const above = this.ext.settings.float_above() && !this.float_lowered && floating;
+
+        if (above && !this.made_above && !this.meta.is_above()) {
+            this.meta.make_above();
+            this.made_above = true;
+        } else if (!above && this.made_above) {
+            this.made_above = false;
+            if (this.meta.is_above()) this.meta.unmake_above();
+        }
+    }
+
+    /**
+     * Where a floating window of size `base` goes: grown to the configured
+     * minimum share of the monitor's work area, and centered on it if
+     * float-center is set.
+     */
+    float_rect(base: Rectangular): Rectangular {
+        const settings = this.ext.settings;
+        const area = this.meta.get_work_area_current_monitor();
+        const min = settings.float_min_size() / 100;
+
+        const width = Math.min(area.width, Math.max(base.width, Math.round(area.width * min)));
+        const height = Math.min(area.height, Math.max(base.height, Math.round(area.height * min)));
+
+        if (!settings.float_center()) return { x: base.x, y: base.y, width, height };
+
+        return {
+            x: area.x + Math.round((area.width - width) / 2),
+            y: area.y + Math.round((area.height - height) / 2),
+            width,
+            height,
+        };
+    }
+
+    /** Applies `float_rect` to the window's current frame */
+    place_floating() {
+        const frame = this.meta.get_frame_rect();
+        const { x, y, width, height } = this.float_rect(frame);
+
+        if (x !== frame.x || y !== frame.y || width !== frame.width || height !== frame.height) {
+            this.meta.move_resize_frame(true, x, y, width, height);
         }
     }
 

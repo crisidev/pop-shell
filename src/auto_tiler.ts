@@ -505,11 +505,18 @@ export class AutoTiler {
             float_except = ext.conf.window_shall_float(wm_class, wm_title);
         }
 
+        // When the window leaves the tree it is restored to prev_rect: make that
+        // its floating size and position instead of whatever it had before tiling.
+        const float_restore = () => {
+            focused.prev_rect = focused.float_rect(focused.prev_rect ?? focused.meta.get_frame_rect());
+        };
+
         if (float_except) {
             if (ext.contains_tag(focused.entity, Tags.ForceTile)) {
                 ext.delete_tag(focused.entity, Tags.ForceTile);
                 const fork_entity = this.attached.get(focused.entity);
                 if (fork_entity) {
+                    float_restore();
                     this.detach_window(ext, focused.entity);
                 }
             } else {
@@ -523,13 +530,17 @@ export class AutoTiler {
             } else {
                 const fork_entity = this.attached.get(focused.entity);
                 if (fork_entity) {
+                    float_restore();
                     this.detach_window(ext, focused.entity);
                     ext.add_tag(focused.entity, Tags.Floating);
                 }
             }
         }
 
-        ext.register_fn(() => focused.activate(true));
+        ext.register_fn(() => {
+            focused.sync_float_above();
+            focused.activate(true);
+        });
     }
 
     toggle_orientation(ext: Ext, window: ShellWindow) {
@@ -547,6 +558,7 @@ export class AutoTiler {
         if (ext.contains_tag(focused.entity, Tags.Floating)) {
             ext.delete_tag(focused.entity, Tags.Floating);
             this.auto_tile(ext, focused, false);
+            focused.sync_float_above();
         }
 
         const fork_entity = this.attached.get(focused.entity);

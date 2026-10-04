@@ -3,6 +3,7 @@ import * as rectangle from './rectangle.js';
 
 import type { Rectangle } from './rectangle.js';
 
+import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
 
@@ -53,6 +54,14 @@ export function current_monitor(): Rectangle {
 export function cursor_rect(): Rectangle {
     let [x, y] = global.get_pointer();
     return new rectangle.Rectangle([x, y, 1, 1]);
+}
+
+/** True while a mouse button is held down, e.g. when focus changes because of a click */
+export function pointer_button_pressed(): boolean {
+    const [, , mods] = global.get_pointer();
+    const buttons =
+        Clutter.ModifierType.BUTTON1_MASK | Clutter.ModifierType.BUTTON2_MASK | Clutter.ModifierType.BUTTON3_MASK;
+    return (mods & buttons) !== 0;
 }
 
 export function dbg<T>(value: T): T {

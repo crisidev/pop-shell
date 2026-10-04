@@ -2,7 +2,7 @@ declare const global: Global, imports: any, log: any, _: (arg: string) => string
 
 interface Global {
     get_current_time(): number;
-    get_pointer(): [number, number];
+    get_pointer(): [number, number, number];
     get_window_actors(): Array<Meta.WindowActor>;
     log(msg: string): void;
     logError(error: any): void;
@@ -297,6 +297,7 @@ declare namespace Meta {
         get_user_time(): number;
         get_wm_class(): string | null;
         get_wm_class_instance(): string | null;
+        get_work_area_current_monitor(): Rectangular;
         get_work_area_for_monitor(monitor: number): null | Rectangular;
         get_workspace(): Workspace;
         has_focus(): boolean;
@@ -314,6 +315,7 @@ declare namespace Meta {
         move_resize_frame(user_op: boolean, x: number, y: number, w: number, h: number): boolean;
         raise(): void;
         skip_taskbar: boolean;
+        unmake_above(): void;
         unmaximize(flags: any): void;
         unminimize(): void;
     }
