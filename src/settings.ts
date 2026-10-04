@@ -13,6 +13,8 @@ interface Settings extends GObject.Object {
     set_uint(key: string, value: number): void;
 
     get_double(key: string): number;
+
+    get_value(key: string): any;
     set_double(key: string, value: number): void;
 
     get_string(key: string): string;
@@ -66,6 +68,9 @@ const FLOAT_ABOVE = 'float-above';
 const FLOAT_CENTER = 'float-center';
 const FLOAT_MIN_SIZE = 'float-min-size';
 const FULLSCREEN_LAUNCHER = 'fullscreen-launcher';
+const WORKSPACE_RULES = 'workspace-rules';
+const WORKSPACE_BACK_AND_FORTH = 'workspace-back-and-forth';
+const STARTUP_WORKSPACE = 'startup-workspace';
 const GAP_INNER = 'gap-inner';
 const GAP_OUTER = 'gap-outer';
 const ROW_SIZE = 'row-size';
@@ -81,6 +86,8 @@ const SHOW_SKIPTASKBAR = 'show-skip-taskbar';
 const MOUSE_CURSOR_FOLLOWS_ACTIVE_WINDOW = 'mouse-cursor-follows-active-window';
 const MOUSE_CURSOR_FOCUS_LOCATION = 'mouse-cursor-focus-location';
 const MAX_WINDOW_WIDTH = 'max-window-width';
+const MOUSE_CURSOR_WARP_TO_LAST_POSITION = 'mouse-cursor-warp-to-last-position';
+const FOCUS_FOLLOWS_MOUSE_FIX = 'focus-follows-mouse-fix';
 
 function valid_color_or(rgba: string, fallback: string): string {
     return rgba && new Gdk.RGBA().parse(rgba) ? rgba : fallback;
@@ -150,6 +157,19 @@ export class ExtensionSettings {
 
     float_min_size(): number {
         return this.ext.get_uint(FLOAT_MIN_SIZE);
+    }
+
+    /** (class pattern, workspace counting from 1, monitor, apply when windows open) entries */
+    workspace_rules(): Array<[string, number, string, boolean]> {
+        return this.ext.get_value(WORKSPACE_RULES).deep_unpack();
+    }
+
+    workspace_back_and_forth(): boolean {
+        return this.ext.get_boolean(WORKSPACE_BACK_AND_FORTH);
+    }
+
+    startup_workspace(): number {
+        return this.ext.get_uint(STARTUP_WORKSPACE);
     }
 
     fullscreen_launcher(): boolean {
@@ -231,6 +251,14 @@ export class ExtensionSettings {
 
     mouse_cursor_focus_location(): number {
         return this.ext.get_uint(MOUSE_CURSOR_FOCUS_LOCATION);
+    }
+
+    mouse_cursor_warp_to_last_position(): boolean {
+        return this.ext.get_boolean(MOUSE_CURSOR_WARP_TO_LAST_POSITION);
+    }
+
+    focus_follows_mouse_fix(): boolean {
+        return this.ext.get_boolean(FOCUS_FOLLOWS_MOUSE_FIX);
     }
 
     max_window_width(): number {

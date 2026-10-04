@@ -7,6 +7,7 @@ interface Global {
     log(msg: string): void;
     logError(error: any): void;
 
+    backend: Meta.Backend;
     compositor: Meta.Compositor;
     display: Meta.Display;
     run_at_leisure(func: () => void): void;
@@ -196,6 +197,8 @@ declare namespace Clutter {
         get_child_at_index(nth: number): Clutter.Actor | null;
         get_n_children(): number;
         get_next_sibling(): Clutter.Actor | null;
+        contains(descendant: Clutter.Actor): boolean;
+        get_actor_at_pos(mode: number, x: number, y: number): Clutter.Actor | null;
         get_parent(): Clutter.Actor | null;
         get_stage(): Clutter.Actor | null;
         get_transition(param: string): any | null;
@@ -307,7 +310,9 @@ declare namespace Meta {
         is_on_all_workspaces(): boolean;
         is_override_redirect(): boolean;
         is_skip_taskbar(): boolean;
+        focus(timestamp: number): void;
         located_on_workspace(workspace: Workspace): boolean;
+        move_to_monitor(monitor: number): void;
         make_above(): void;
         make_fullscreen(): void;
         maximize(flags: MaximizeFlags): void;
@@ -318,6 +323,14 @@ declare namespace Meta {
         unmake_above(): void;
         unmaximize(flags: any): void;
         unminimize(): void;
+    }
+
+    interface MonitorManager extends GObject.Object {
+        get_monitor_for_connector(connector: string): number;
+    }
+
+    interface Backend extends GObject.Object {
+        get_monitor_manager(): MonitorManager;
     }
 
     interface Laters extends GObject.Object {

@@ -1,4 +1,5 @@
 import type { Ext } from './extension.js';
+import { WORKSPACE_KEYS } from './workspaces.js';
 
 import { wm } from 'resource:///org/gnome/shell/ui/main.js';
 import Shell from 'gi://Shell';
@@ -15,7 +16,13 @@ export class Keybindings {
         this.global = {
             'activate-launcher': () => ext.window_search.open(ext),
             'tile-enter': () => ext.tiler.enter(ext),
+            'rebalance-windows': () => ext.workspace_rules.rebalance(true),
         };
+
+        for (let i = 0; i < WORKSPACE_KEYS; i += 1) {
+            (this.global as any)[`pop-switch-workspace-${i + 1}`] = () => ext.workspace_rules.switch_to(i);
+            (this.global as any)[`pop-move-workspace-${i + 1}`] = () => ext.workspace_rules.move_to(i);
+        }
 
         this.window_focus = {
             'focus-left': () => ext.focus_left(),

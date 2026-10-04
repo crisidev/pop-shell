@@ -9,13 +9,11 @@ import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Rectangle } from './rectangle.js';
 import * as scheduler from './scheduler.js';
-import * as focus from './focus.js';
 import { Border } from './border.js';
 
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
-import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const { OnceCell } = once_cell;
 
@@ -56,6 +54,9 @@ export class ShellWindow {
 
     // True if this floating window was sent behind by clicking another window
     float_lowered: boolean = false;
+
+    // True if workspace rules still need this window's WM class to place it
+    workspace_rule_pending: boolean = false;
 
     border: null | Border = new Border();
 
@@ -328,7 +329,7 @@ export class ShellWindow {
         let br = other.rect().clone();
 
         other.move(ext, ar);
-        this.move(ext, br, () => place_pointer_on(this.ext, this.meta));
+        this.move(ext, br, () => this.ext.pointer.place_on(this.meta));
     }
 
     title(): string {
@@ -470,6 +471,11 @@ export class ShellWindow {
     }
 
     private wm_class_changed() {
+        if (this.workspace_rule_pending && this.meta.get_wm_class()) {
+            this.workspace_rule_pending = false;
+            this.ext.workspace_rules.apply(this.meta, true);
+        }
+
         if (this.is_tilable(this.ext)) {
             this.ext.connect_window(this);
             if (!this.meta.minimized) {
@@ -577,68 +583,14 @@ export function activate(ext: Ext, move_mouse: boolean, win: Meta.Window) {
         workspace.activate_with_focus(win, global.get_current_time());
         win.raise();
 
-        const pointer_placement_permitted =
-            move_mouse &&
-            Main.modalCount === 0 &&
-            ext.settings.mouse_cursor_follows_active_window() &&
-            !pointer_already_on_window(win) &&
-            pointer_in_work_area();
-
-        if (pointer_placement_permitted) {
-            place_pointer_on(ext, win);
+        // Keyboard and programmatic activations bring the pointer along; the
+        // pointer module skips it when the pointer is already there.
+        if (move_mouse) {
+            ext.register_fn(() => ext.pointer.follow(win));
+        } else if (global.display.get_focus_window() !== win) {
+            ext.pointer.suppress(win);
         }
     } catch (error) {
         log.error(`failed to activate window: ${error}`);
     }
-}
-
-function pointer_in_work_area(): boolean {
-    const cursor = lib.cursor_rect();
-    const indice = global.display.get_current_monitor();
-    const mon = global.display.get_workspace_manager().get_active_workspace().get_work_area_for_monitor(indice);
-
-    return mon ? cursor.intersects(mon) : false;
-}
-
-function place_pointer_on(ext: Ext, win: Meta.Window) {
-    const rect = win.get_frame_rect();
-    let x = rect.x;
-    let y = rect.y;
-
-    let key = Object.keys(focus.FocusPosition)[ext.settings.mouse_cursor_focus_location()];
-    let pointer_position_ = focus.FocusPosition[key as keyof typeof focus.FocusPosition];
-
-    switch (pointer_position_) {
-        case focus.FocusPosition.TopLeft:
-            x += 8;
-            y += 8;
-            break;
-        case focus.FocusPosition.BottomLeft:
-            x += 8;
-            y += rect.height - 16;
-            break;
-        case focus.FocusPosition.TopRight:
-            x += rect.width - 16;
-            y += 8;
-            break;
-        case focus.FocusPosition.BottomRight:
-            x += rect.width - 16;
-            y += rect.height - 16;
-            break;
-        case focus.FocusPosition.Center:
-            x += rect.width / 2 + 8;
-            y += rect.height / 2 + 8;
-            break;
-        default:
-            x += 8;
-            y += 8;
-    }
-
-    global.stage.get_context().get_backend().get_default_seat().warp_pointer(x, y);
-}
-
-function pointer_already_on_window(meta: Meta.Window): boolean {
-    const cursor = lib.cursor_rect();
-
-    return cursor.intersects(meta.get_frame_rect());
 }

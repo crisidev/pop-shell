@@ -56,6 +56,145 @@
             <summary>Minimum size of floating windows, as a percentage of the monitor's work area (0 disables)</summary>
         </key>
 
+        <key type="a(susb)" name="workspace-rules">
+            <default>[]</default>
+            <summary>App to workspace rules</summary>
+            <description>
+                Each entry is (class, workspace, monitor, on-open). class is a case-insensitive
+                regular expression matched against the window's WM class and instance; workspace
+                counts from 1; monitor is '' (any), 'primary', 'secondary' or a connector name such
+                as 'eDP-1'. Windows on a monitor outside the workspaces (workspaces-only-on-primary)
+                ignore the workspace, which is used when that monitor is not connected. on-open
+                moves new windows as they open; without it the rule only applies when windows are
+                rebalanced (the rebalance-windows key, or a monitor change).
+            </description>
+        </key>
+
+        <key type="b" name="workspace-back-and-forth">
+            <default>true</default>
+            <summary>Pressing the current workspace's key switches back to the previous workspace</summary>
+        </key>
+
+        <key type="u" name="startup-workspace">
+            <default>0</default>
+            <summary>Workspace to switch to at login, hiding the overview (counts from 1, 0 disables)</summary>
+        </key>
+
+        <key type="as" name="pop-switch-workspace-1">
+            <default><![CDATA[[]]]></default>
+            <summary>Switch to workspace 1 (again: back to the previous workspace)</summary>
+        </key>
+
+        <key type="as" name="pop-move-workspace-1">
+            <default><![CDATA[[]]]></default>
+            <summary>Move the focused window to workspace 1</summary>
+        </key>
+
+        <key type="as" name="pop-switch-workspace-2">
+            <default><![CDATA[[]]]></default>
+            <summary>Switch to workspace 2 (again: back to the previous workspace)</summary>
+        </key>
+
+        <key type="as" name="pop-move-workspace-2">
+            <default><![CDATA[[]]]></default>
+            <summary>Move the focused window to workspace 2</summary>
+        </key>
+
+        <key type="as" name="pop-switch-workspace-3">
+            <default><![CDATA[[]]]></default>
+            <summary>Switch to workspace 3 (again: back to the previous workspace)</summary>
+        </key>
+
+        <key type="as" name="pop-move-workspace-3">
+            <default><![CDATA[[]]]></default>
+            <summary>Move the focused window to workspace 3</summary>
+        </key>
+
+        <key type="as" name="pop-switch-workspace-4">
+            <default><![CDATA[[]]]></default>
+            <summary>Switch to workspace 4 (again: back to the previous workspace)</summary>
+        </key>
+
+        <key type="as" name="pop-move-workspace-4">
+            <default><![CDATA[[]]]></default>
+            <summary>Move the focused window to workspace 4</summary>
+        </key>
+
+        <key type="as" name="pop-switch-workspace-5">
+            <default><![CDATA[[]]]></default>
+            <summary>Switch to workspace 5 (again: back to the previous workspace)</summary>
+        </key>
+
+        <key type="as" name="pop-move-workspace-5">
+            <default><![CDATA[[]]]></default>
+            <summary>Move the focused window to workspace 5</summary>
+        </key>
+
+        <key type="as" name="pop-switch-workspace-6">
+            <default><![CDATA[[]]]></default>
+            <summary>Switch to workspace 6 (again: back to the previous workspace)</summary>
+        </key>
+
+        <key type="as" name="pop-move-workspace-6">
+            <default><![CDATA[[]]]></default>
+            <summary>Move the focused window to workspace 6</summary>
+        </key>
+
+        <key type="as" name="pop-switch-workspace-7">
+            <default><![CDATA[[]]]></default>
+            <summary>Switch to workspace 7 (again: back to the previous workspace)</summary>
+        </key>
+
+        <key type="as" name="pop-move-workspace-7">
+            <default><![CDATA[[]]]></default>
+            <summary>Move the focused window to workspace 7</summary>
+        </key>
+
+        <key type="as" name="pop-switch-workspace-8">
+            <default><![CDATA[[]]]></default>
+            <summary>Switch to workspace 8 (again: back to the previous workspace)</summary>
+        </key>
+
+        <key type="as" name="pop-move-workspace-8">
+            <default><![CDATA[[]]]></default>
+            <summary>Move the focused window to workspace 8</summary>
+        </key>
+
+        <key type="as" name="pop-switch-workspace-9">
+            <default><![CDATA[[]]]></default>
+            <summary>Switch to workspace 9 (again: back to the previous workspace)</summary>
+        </key>
+
+        <key type="as" name="pop-move-workspace-9">
+            <default><![CDATA[[]]]></default>
+            <summary>Move the focused window to workspace 9</summary>
+        </key>
+
+        <key type="as" name="pop-switch-workspace-10">
+            <default><![CDATA[[]]]></default>
+            <summary>Switch to workspace 10 (again: back to the previous workspace)</summary>
+        </key>
+
+        <key type="as" name="pop-move-workspace-10">
+            <default><![CDATA[[]]]></default>
+            <summary>Move the focused window to workspace 10</summary>
+        </key>
+
+        <key type="as" name="rebalance-windows">
+            <default><![CDATA[[]]]></default>
+            <summary>Move every window to the workspace and monitor its rule asks for</summary>
+        </key>
+
+        <key type="b" name="mouse-cursor-warp-to-last-position">
+            <default>false</default>
+            <summary>When the pointer follows focus, return it to where it last was in that window</summary>
+        </key>
+
+        <key type="b" name="focus-follows-mouse-fix">
+            <default>true</default>
+            <summary>Focus the window under a resting pointer when sloppy focus misses a slow movement</summary>
+        </key>
+
         <key type="b" name="fullscreen-launcher">
             <default>false</default>
             <summary>Allow showing launcher above fullscreen windows</summary>

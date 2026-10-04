@@ -24,6 +24,9 @@ import * as add_exception from './dialog_add_exception.js';
 import * as exec from './executor.js';
 import * as dbus_service from './dbus_service.js';
 import { BorderStyle } from './border.js';
+import { Workspaces } from './workspaces.js';
+import { Pointer } from './pointer.js';
+import { NotificationDestroyedReason } from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as scheduler from './scheduler.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import type { Entity } from './ecs.js';
@@ -154,6 +157,12 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** The current scaling factor in GNOME Shell */
     dpi: number = St.ThemeContext.get_for_stage(global.stage).scale_factor;
 
+    /** Pointer follows focus, and the slow-mouse focus fix */
+    pointer: Pointer = new Pointer(this);
+
+    /** App-to-workspace rules and workspace switching */
+    workspace_rules: Workspaces = new Workspaces(this);
+
     /** Precomputed border styles for focused and unfocused windows */
     border_styles: { active: BorderStyle; inactive: BorderStyle } = this.create_border_styles();
 
@@ -277,6 +286,11 @@ export class Ext extends Ecs.System<ExtEvent> {
         this.dbus.FocusLeft = () => this.focus_left();
         this.dbus.FocusRight = () => this.focus_right();
         this.dbus.Launcher = () => this.window_search.open(this);
+        this.dbus.ClearNotifications = () => {
+            for (const source of Main.messageTray.getSources()) {
+                source.destroy(NotificationDestroyedReason.DISMISSED);
+            }
+        };
 
         this.dbus.WindowFocus = (window: [number, number]) => {
             const target_window = this.windows.get(window);
@@ -981,6 +995,7 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     update_borders() {
+        this.pointer.invalidate_hover();
         const focus = this.focus_window();
         for (const win of this.windows.values()) {
             win.refresh_border(win === focus);
@@ -1807,6 +1822,9 @@ export class Ext extends Ecs.System<ExtEvent> {
                     win.border = null;
                 }
 
+                this.workspace_rules.on_window_destroyed(window);
+                this.pointer.forget(window);
+
                 this.on_destroy(entity);
 
                 return false;
@@ -2020,6 +2038,13 @@ export class Ext extends Ecs.System<ExtEvent> {
                 case 'float-above':
                     this.sync_all_float_above();
                     break;
+                case 'workspace-rules':
+                    this.workspace_rules.load_rules();
+                    break;
+                case 'focus-follows-mouse-fix':
+                case 'mouse-cursor-warp-to-last-position':
+                    this.pointer.update_motion();
+                    break;
                 case 'active-hint-border-radius':
                 case 'active-hint-border-width':
                 case 'hint-color-rgba':
@@ -2133,6 +2158,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         const shell_window = this.get_window(meta_window);
 
                         if (shell_window) {
+                            this.pointer.on_focus_changed(meta_window, by_click);
                             this.on_float_focus(shell_window, by_click);
 
                             // Avoid re-focusing a window that's already focused.
@@ -2208,6 +2234,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
 
         this.connect(workspace_manager, 'active-workspace-changed', () => {
+            this.workspace_rules.on_active_workspace_changed();
             this.on_active_workspace_changed();
         });
 
@@ -2645,6 +2672,9 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                 apply_migrations(assigned_monitors);
 
+                // Put apps back where their rules want them on the new monitor layout
+                this.register_fn(() => this.workspace_rules.rebalance(false));
+
                 return;
             })();
 
@@ -2719,7 +2749,13 @@ export class Ext extends Ecs.System<ExtEvent> {
             this.ids.insert(entity, id);
             this.names.insert(entity, name);
 
+            // Place new windows by their rule before they are tiled. Some apps set
+            // their WM class only after mapping: those are placed when it arrives.
+            const rule_pending = !this.init && meta.get_wm_class() === null;
+            if (!this.init && !rule_pending) this.workspace_rules.apply(meta, true);
+
             let win = new Window.ShellWindow(entity, meta, window_app, this);
+            win.workspace_rule_pending = rule_pending;
 
             this.windows.insert(entity, win);
             this.monitors.insert(entity, [win.meta.get_monitor(), win.workspace_id()]);
@@ -2847,6 +2883,8 @@ export default class PopShellExtension extends Extension {
 
         ext.injections_add();
         ext.signals_attach();
+        ext.pointer.enable();
+        ext.workspace_rules.startup();
 
         disable_window_attention_handler();
 
@@ -2880,6 +2918,7 @@ export default class PopShellExtension extends Extension {
             ext.stop_launcher_services();
             ext.destroy_all_borders();
             ext.release_float_above();
+            ext.pointer.disable();
             ext.window_search.remove_injections();
 
             layoutManager.removeChrome(ext.overlay);

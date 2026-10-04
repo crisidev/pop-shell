@@ -7,6 +7,7 @@ const IFACE: string = `<node>
     <method name="FocusUp"/>
     <method name="FocusDown"/>
     <method name="Launcher"/>
+    <method name="ClearNotifications"/>
     <method name="WindowFocus">
         <arg type="(uu)" direction="in" name="window"/>
     </method>
@@ -31,6 +32,7 @@ export class Service {
     FocusUp: () => void = () => {};
     FocusDown: () => void = () => {};
     Launcher: () => void = () => {};
+    ClearNotifications: () => void = () => {};
     WindowFocus: (window: [number, number]) => void = () => {};
     WindowList: () => Array<[[number, number], string, string, string]> = () => [];
     WindowQuit: (window: [number, number]) => void = () => {};
