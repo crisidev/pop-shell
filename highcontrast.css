@@ -9,43 +9,14 @@
 }
 
 
-.pop-shell-search-element:select{
-    background: #fff;
-    border-radius: 5px;
-    color: #000;
-}
-
-.pop-shell-search-icon {
-    margin-right: 10px;
-}
-
-.pop-shell-search-cat {
-    margin-right: 10px;
-}
-
-.pop-shell-search-element {
-    padding-left: 10px;
-    padding-right: 2px;
-    padding-top: 6px;
-    padding-bottom: 6px;
-}
-
+/* Tab colors follow the window hints (see Ext.create_tab_styles) */
 .pop-shell-tab {
-    border: 1px solid #333;
-    color: #000;
     padding: 0 1em;
 }
 
-.pop-shell-tab-active {
-    background: #FBB86C;
-}
-
-.pop-shell-tab-inactive {
-    background: #9B8E8A;
-}
-
 .pop-shell-tab-urgent {
-    background: #D00;
+    background-color: #db4b4b;
+    color: white;
 }
 
 .pop-shell-entry:indeterminate {

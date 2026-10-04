@@ -1,10 +1,7 @@
-import * as lib from './lib.js';
 import * as log from './log.js';
-import * as once_cell from './once_cell.js';
 import * as Rect from './rectangle.js';
 import * as Tags from './tags.js';
 import * as utils from './utils.js';
-import * as xprop from './xprop.js';
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Rectangle } from './rectangle.js';
@@ -15,21 +12,8 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
-const { OnceCell } = once_cell;
 
 export var window_tracker = Shell.WindowTracker.get_default();
-
-const WM_TITLE_BLACKLIST: Array<string> = [
-    'Firefox',
-    'Nightly', // Firefox Nightly
-    'Tor Browser',
-];
-
-interface X11Info {
-    normal_hints: once_cell.OnceCell<lib.SizeHint | null>;
-    wm_role_: once_cell.OnceCell<string | null>;
-    xid_: once_cell.OnceCell<string | null>;
-}
 
 export class ShellWindow {
     entity: Entity;
@@ -58,19 +42,14 @@ export class ShellWindow {
     // True if workspace rules still need this window's WM class to place it
     workspace_rule_pending: boolean = false;
 
+    // True while a tiling animation moves a clone of this window
+    animating: boolean = false;
+
     border: null | Border = new Border();
 
     prev_rect: null | Rectangular = null;
 
     window_app: any;
-
-    private was_hidden: boolean = false;
-
-    private extra: X11Info = {
-        normal_hints: new OnceCell(),
-        wm_role_: new OnceCell(),
-        xid_: new OnceCell(),
-    };
 
     constructor(entity: Entity, window: Meta.Window, window_app: any, ext: Ext) {
         this.window_app = window_app;
@@ -84,16 +63,6 @@ export class ShellWindow {
         // Float fullscreen windows by default, such as Kodi.
         if (this.meta.is_fullscreen()) {
             ext.add_tag(entity, Tags.Floating);
-        }
-
-        if (this.may_decorate()) {
-            if (!this.is_client_decorated()) {
-                if (ext.settings.show_title()) {
-                    this.decoration_show(ext);
-                } else {
-                    this.decoration_hide(ext);
-                }
-            }
         }
 
         this.bind_window_events();
@@ -151,27 +120,6 @@ export class ShellWindow {
         return out;
     }
 
-    private decoration(_ext: Ext, callback: (xid: string) => void): void {
-        if (this.may_decorate()) {
-            const xid = this.xid();
-            if (xid) callback(xid);
-        }
-    }
-
-    decoration_hide(ext: Ext): void {
-        if (this.ignore_decoration()) return;
-
-        this.was_hidden = true;
-
-        this.decoration(ext, (xid) => xprop.set_hint(xid, xprop.MOTIF_HINTS, xprop.HIDE_FLAGS));
-    }
-
-    decoration_show(ext: Ext): void {
-        if (!this.was_hidden) return;
-
-        this.decoration(ext, (xid) => xprop.set_hint(xid, xprop.MOTIF_HINTS, xprop.SHOW_FLAGS));
-    }
-
     icon(_ext: Ext, size: number): any {
         let icon = this.window_app.create_icon_texture(size);
 
@@ -184,22 +132,6 @@ export class ShellWindow {
         }
 
         return icon;
-    }
-
-    ignore_decoration(): boolean {
-        const name = this.meta.get_wm_class();
-        if (name === null) return true;
-        return WM_TITLE_BLACKLIST.findIndex((n) => name.startsWith(n)) !== -1;
-    }
-
-    is_client_decorated(): boolean {
-        // look I guess I'll hack something together in here if at all possible
-        // Because Meta.Window.is_client_decorated() was removed in Meta 15, using it breaks the extension in gnome 47 or higher
-        //return this.meta.window_type == Meta.WindowType.META_WINDOW_OVERRIDE_OTHER;
-        const xid = this.xid();
-        const extents = xid ? xprop.get_frame_extents(xid) : false;
-        if (!extents) return false;
-        return true;
     }
 
     is_maximized(): boolean {
@@ -276,11 +208,6 @@ export class ShellWindow {
         return this.meta.get_transient_for() !== null;
     }
 
-    may_decorate(): boolean {
-        const xid = this.xid();
-        return xid ? xprop.may_decorate(xid) : false;
-    }
-
     move(ext: Ext, rect: Rectangular, on_complete?: () => void) {
         if (!this.same_workspace() && this.is_maximized()) {
             return;
@@ -298,7 +225,7 @@ export class ShellWindow {
 
         if (actor) {
             if (this.is_maximized()) {
-                meta.unmaximize(Meta.MaximizeFlags.BOTH);
+                meta.unmaximize();
             }
             actor.remove_all_transitions();
 
@@ -317,13 +244,6 @@ export class ShellWindow {
         return Rect.Rectangle.from_meta(this.meta.get_frame_rect());
     }
 
-    size_hint(): lib.SizeHint | null {
-        return this.extra.normal_hints.get_or_init(() => {
-            const xid = this.xid();
-            return xid ? xprop.get_size_hints(xid) : null;
-        });
-    }
-
     swap(ext: Ext, other: ShellWindow): void {
         let ar = this.rect().clone();
         let br = other.rect().clone();
@@ -337,13 +257,6 @@ export class ShellWindow {
         return title ? title : this.name(this.ext);
     }
 
-    wm_role(): string | null {
-        return this.extra.wm_role_.get_or_init(() => {
-            const xid = this.xid();
-            return xid ? xprop.get_window_role(xid) : null;
-        });
-    }
-
     workspace_id(): number {
         const workspace = this.meta.get_workspace();
         if (workspace) {
@@ -354,13 +267,6 @@ export class ShellWindow {
         }
     }
 
-    xid(): string | null {
-        return this.extra.xid_.get_or_init(() => {
-            if (utils.is_wayland()) return null;
-            return xprop.get_xid(this.meta);
-        });
-    }
-
     /** True if the window is on screen in a state where it may carry a border or dim overlay */
     private border_base_permitted(): boolean {
         const actor = this.meta.get_compositor_private();
@@ -368,6 +274,7 @@ export class ShellWindow {
 
         return (
             actor.visible &&
+            !this.animating &&
             actor.get_parent() === this.border.actor.get_parent() &&
             !this.meta.minimized &&
             !this.meta.is_fullscreen() &&

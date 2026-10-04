@@ -1,4 +1,3 @@
-import * as Utils from './utils.js';
 
 import type { Ext } from './extension.js';
 
@@ -23,9 +22,9 @@ export class Indicator {
     appearances: any;
 
     toggle_tiled: any;
-    toggle_titles: null | any;
     toggle_active: any;
     toggle_inactive: any;
+    toggle_animations: any;
     border_radius: any;
     border_width: any;
 
@@ -68,6 +67,10 @@ export class Indicator {
             ext.settings.set_inactive_hint(toggle.state);
         });
 
+        this.toggle_animations = toggle(_('Animate Tiling'), ext.settings.animate_tiling(), (toggle) => {
+            ext.settings.set_animate_tiling(toggle.state);
+        });
+
         this.border_width = number_entry(
             _('Border Width'),
             {
@@ -105,11 +108,7 @@ export class Indicator {
         bm.addMenuItem(settings_button(bm));
         bm.addMenuItem(menu_separator(''));
 
-        if (!Utils.is_wayland()) {
-            this.toggle_titles = show_title(ext);
-            bm.addMenuItem(this.toggle_titles);
-        }
-
+        bm.addMenuItem(this.toggle_animations);
         bm.addMenuItem(this.toggle_active);
         bm.addMenuItem(this.toggle_inactive);
         bm.addMenuItem(this.border_width);
@@ -204,18 +203,7 @@ function shortcuts(menu: any): any {
     layout_manager.set_column_spacing(30);
     layout_manager.attach(create_label(_('Shortcuts')), 0, 0, 2, 1);
 
-    let launcher_shortcut = _('Super + /');
-    // const cosmic_settings = Settings.settings_new_id(
-    //   'org.gnome.shell.extensions.pop-cosmic'
-    // );
-    // if (cosmic_settings) {
-    //   if (cosmic_settings.get_enum('overlay-key-action') === 2) {
-    //     launcher_shortcut = _('Super');
-    //   }
-    // }
-
     [
-        [_('Launcher'), launcher_shortcut],
         [_('Navigate Windows'), _('Super + Arrow Keys')],
         [_('Toggle Tiling'), _('Super + Y')],
     ].forEach((section, idx) => {
@@ -321,14 +309,6 @@ function parse_number(text: string): number {
     }
 
     return number;
-}
-
-function show_title(ext: Ext): any {
-    const t = toggle(_('Show Window Titles'), ext.settings.show_title(), (toggle: any) => {
-        ext.settings.set_show_title(toggle.state);
-    });
-
-    return t;
 }
 
 function toggle(desc: string, active: boolean, connect: (toggle: any, state: boolean) => void): any {

@@ -4,7 +4,6 @@ import type { ShellWindow } from './window.js';
 
 import * as Ecs from './ecs.js';
 import * as a from './arena.js';
-import * as utils from './utils.js';
 
 const Arena = a.Arena;
 import Clutter from 'gi://Clutter';
@@ -14,7 +13,10 @@ import St from 'gi://St';
 const ACTIVE_TAB = 'pop-shell-tab pop-shell-tab-active';
 const INACTIVE_TAB = 'pop-shell-tab pop-shell-tab-inactive';
 const URGENT_TAB = 'pop-shell-tab pop-shell-tab-urgent';
-const INACTIVE_TAB_STYLE = '#9B8E8A';
+
+type TabState = 'active' | 'inactive' | 'urgent';
+
+const TAB_CLASSES: Record<TabState, string> = { active: ACTIVE_TAB, inactive: INACTIVE_TAB, urgent: URGENT_TAB };
 
 export var TAB_HEIGHT: number = 24;
 
@@ -148,8 +150,6 @@ export class Stack {
 
     private rect: Rectangular = { width: 0, height: 0, x: 0, y: 0 };
 
-    private restacker: SignalID = global.display.connect('restacked', () => this.restack());
-
     private tabs_destroy: SignalID;
 
     constructor(ext: Ext, active: Entity, workspace: number, monitor: number) {
@@ -180,8 +180,8 @@ export class Stack {
 
         let tab: Tab = { active, entity, signals: [], button: id, button_signal: null };
         let comp = this.tabs.length;
-        this.bind_hint_events(tab);
         this.tabs.push(tab);
+        this.style_tab(comp, active ? 'active' : 'inactive');
         this.watch_signals(comp, id, window);
         this.widgets.tabs.add_child(button);
     }
@@ -227,43 +227,43 @@ export class Stack {
         let id = 0;
 
         for (const [idx, component] of this.tabs.entries()) {
-            let name;
-
             this.window_exec(id, component.entity, (window) => {
                 const actor = window.meta.get_compositor_private();
 
                 if (Ecs.entity_eq(entity, component.entity)) {
                     this.active_id = id;
                     component.active = true;
-                    name = ACTIVE_TAB;
                     if (actor) actor.show();
                 } else {
                     component.active = false;
-                    name = INACTIVE_TAB;
                     if (actor) actor.hide();
                 }
 
-                let button = this.buttons.get(component.button);
-                if (button) {
-                    button.set_style_class_name(name);
-                    let tab_color = '';
-                    if (component.active) {
-                        let settings = this.ext.settings;
-                        let color_value = settings.hint_color_rgba();
-                        tab_color = `${color_value}; color: ${utils.is_dark(color_value) ? 'white' : 'black'}`;
-                    } else {
-                        tab_color = `${INACTIVE_TAB_STYLE}`;
-                    }
-
-                    const tab_border_radius = this.get_tab_border_radius(idx);
-                    button.set_style(`background: ${tab_color}; border-radius: ${tab_border_radius};`);
-                }
+                this.style_tab(idx, component.active ? 'active' : 'inactive');
             });
 
             id += 1;
         }
 
         this.reset_visibility(permitted);
+    }
+
+    /**
+     * Styles a tab from the cached tab styles (colors follow the window
+     * hint) plus its corner radius, which depends on its position.
+     */
+    private style_tab(idx: number, state: TabState) {
+        const tab = this.tabs[idx];
+        const button = tab ? this.buttons.get(tab.button) : null;
+        if (!button) return;
+
+        button.set_style_class_name(TAB_CLASSES[state]);
+        button.set_style(`${this.ext.tab_styles[state]} border-radius: ${this.get_tab_border_radius(idx)};`);
+    }
+
+    /** Re-applies tab styles after the hint colors or radius changed */
+    restyle() {
+        this.tabs.forEach((tab, idx) => this.style_tab(idx, tab.active ? 'active' : 'inactive'));
     }
 
     // returns the tab button border radius based on it's order.
@@ -328,38 +328,6 @@ export class Stack {
         return this.ext.windows.get(this.active)?.meta;
     }
 
-    private bind_hint_events(tab: Tab) {
-        let settings = this.ext.settings;
-        let button = this.buttons.get(tab.button);
-        if (button) {
-            let change_id = settings.ext.connect('changed', (_, key) => {
-                if (key === 'hint-color-rgba') {
-                    this.change_tab_color(tab);
-                }
-                return false;
-            });
-            button.connect('destroy', () => {
-                settings.ext.disconnect(change_id);
-            });
-        }
-        this.change_tab_color(tab);
-    }
-
-    private change_tab_color(tab: Tab) {
-        let settings = this.ext.settings;
-        let button = this.buttons.get(tab.button);
-        if (button) {
-            let tab_color = '';
-            if (Ecs.entity_eq(tab.entity, this.active)) {
-                let color_value = settings.hint_color_rgba();
-                tab_color = `background: ${color_value}; color: ${utils.is_dark(color_value) ? 'white' : 'black'}`;
-            } else {
-                tab_color = `background: ${INACTIVE_TAB_STYLE}`;
-            }
-            button.set_style(tab_color);
-        }
-    }
-
     /** Clears watched tabs and removes all tabs */
     clear() {
         this.active_disconnect();
@@ -401,7 +369,6 @@ export class Stack {
 
     /** Disconnects this stack's signal, and destroys its widgets */
     destroy() {
-        global.display.disconnect(this.restacker);
         this.active_disconnect();
 
         // Disconnect stack signals from each window, and unhide them.
@@ -561,18 +528,18 @@ export class Stack {
             return;
         }
 
-        const stack_parent = this.widgets.tabs.get_parent();
-        if (stack_parent) {
-            stack_parent.remove_child(this.widgets.tabs);
+        const tabs = this.widgets.tabs;
+        const stack_parent = tabs.get_parent();
+        if (stack_parent !== parent) {
+            stack_parent?.remove_child(tabs);
+            parent.add_child(tabs);
         }
-
-        parent.add_child(this.widgets.tabs);
 
         // Reposition actors on the screen, being careful about not displaying over maximized windows
         if (!window.meta.is_fullscreen() && !window.is_maximized() && !this.ext.maximized_on_active_display()) {
-            parent.set_child_above_sibling(this.widgets.tabs, actor);
-        } else {
-            parent.set_child_below_sibling(this.widgets.tabs, actor);
+            if (actor.get_next_sibling() !== tabs) parent.set_child_above_sibling(tabs, actor);
+        } else if (tabs.get_next_sibling() !== actor) {
+            parent.set_child_below_sibling(tabs, actor);
         }
     }
 
@@ -670,12 +637,6 @@ export class Stack {
                     window.activate(false);
 
                     this.reposition();
-
-                    for (const comp of this.tabs) {
-                        this.buttons.get(comp.button)?.set_style_class_name(INACTIVE_TAB);
-                    }
-
-                    widget.set_style_class_name(ACTIVE_TAB);
                 }
             });
         });
@@ -695,9 +656,7 @@ export class Stack {
 
             window.meta.connect('notify::urgent', () => {
                 this.window_exec(comp, entity, (window) => {
-                    if (!window.meta.has_focus()) {
-                        this.buttons.get(button)?.set_style_class_name(URGENT_TAB);
-                    }
+                    if (!window.meta.has_focus()) this.style_tab(comp, 'urgent');
                 });
             }),
         ];

@@ -14,7 +14,6 @@ export class Keybindings {
     constructor(ext: Ext) {
         this.ext = ext;
         this.global = {
-            'activate-launcher': () => ext.window_search.open(ext),
             'tile-enter': () => ext.tiler.enter(ext),
             'rebalance-windows': () => ext.workspace_rules.rebalance(true),
         };

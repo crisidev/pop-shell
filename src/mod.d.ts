@@ -18,6 +18,11 @@ interface Global {
     workspace_manager: Meta.WorkspaceManager;
 }
 
+declare class TextDecoder {
+    constructor(label?: string);
+    decode(input?: Uint8Array): string;
+}
+
 interface ImportMeta {
     url: string;
 }
@@ -59,6 +64,11 @@ declare module 'gi://Clutter' {
 declare module 'gi://Shell' {
     let Shell: any;
     export default Shell;
+}
+
+declare module 'gi://Mtk' {
+    let Mtk: any;
+    export default Mtk;
 }
 
 declare module 'gi://Meta' {
@@ -197,6 +207,7 @@ declare namespace Clutter {
         get_child_at_index(nth: number): Clutter.Actor | null;
         get_n_children(): number;
         get_next_sibling(): Clutter.Actor | null;
+        insert_child_above(child: Actor, sibling: Actor | null): void;
         contains(descendant: Clutter.Actor): boolean;
         get_actor_at_pos(mode: number, x: number, y: number): Clutter.Actor | null;
         get_parent(): Clutter.Actor | null;
@@ -315,13 +326,13 @@ declare namespace Meta {
         move_to_monitor(monitor: number): void;
         make_above(): void;
         make_fullscreen(): void;
-        maximize(flags: MaximizeFlags): void;
+        maximize(): void;
         move_frame(user_op: boolean, x: number, y: number): void;
         move_resize_frame(user_op: boolean, x: number, y: number, w: number, h: number): boolean;
         raise(): void;
         skip_taskbar: boolean;
         unmake_above(): void;
-        unmaximize(flags: any): void;
+        unmaximize(): void;
         unminimize(): void;
     }
 

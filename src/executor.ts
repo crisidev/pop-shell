@@ -14,16 +14,20 @@ export class GLibExecutor<T> implements Executor<T> {
      *
      * - If the signal has already been created, the event will be added to the queue.
      * - The signal will continue executing for as long as there are events remaining in the queue.
-     * - Events are handled within batches, yielding between each new set of events.
+     * - Events are handled within batches, yielding between each new set of events: each
+     *   idle callback runs the events queued before it started, in order, and events those
+     *   queue run on the next one.
      */
     wake<S extends Ecs.System<T>>(system: S, event: T): void {
-        this.#events.unshift(event);
+        this.#events.push(event);
 
         if (this.#event_loop) return;
 
         this.#event_loop = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-            let event = this.#events.pop();
-            if (event) system.run(event);
+            const batch = this.#events;
+            this.#events = new Array();
+
+            for (const event of batch) system.run(event);
 
             if (this.#events.length === 0) {
                 this.#event_loop = null;
@@ -52,6 +56,7 @@ export class OnceExecutor<X, T extends Iterable<X>> {
             const next: X = iterator.next().value;
 
             if (typeof next === 'undefined') {
+                this.#signal = null;
                 if (then)
                     GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
                         then();
@@ -61,12 +66,15 @@ export class OnceExecutor<X, T extends Iterable<X>> {
                 return false;
             }
 
-            return apply(next);
+            const again = apply(next);
+            if (!again) this.#signal = null;
+            return again;
         });
     }
 
     stop() {
         if (this.#signal !== null) GLib.source_remove(this.#signal);
+        this.#signal = null;
     }
 }
 
@@ -93,11 +101,14 @@ export class ChannelExecutor<X> {
         this.#signal = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
             const e = this.#channel.shift();
 
-            return typeof e === 'undefined' ? true : apply(e);
+            const again = typeof e === 'undefined' ? true : apply(e);
+            if (!again) this.#signal = null;
+            return again;
         });
     }
 
     stop() {
         if (this.#signal !== null) GLib.source_remove(this.#signal);
+        this.#signal = null;
     }
 }

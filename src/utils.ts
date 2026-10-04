@@ -5,17 +5,8 @@ import * as log from './log.js';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
-import Meta from 'gi://Meta';
 const { Ok, Err } = result;
 const { Error } = error;
-
-export function is_wayland(): boolean {
-    if (typeof Meta.is_wayland_compositor === 'function') {
-        return Meta.is_wayland_compositor();
-    }
-    // GNOME 50+ removed X11 support; always Wayland
-    return true;
-}
 
 export function block_signal(object: GObject.Object, signal: SignalID) {
     GObject.signal_handler_block(object, signal);
@@ -30,7 +21,7 @@ export function read_to_string(path: string): result.Result<string, error.Error>
     try {
         const [ok, contents] = file.load_contents(null);
         if (ok) {
-            return Ok(imports.byteArray.toString(contents));
+            return Ok(new TextDecoder().decode(contents));
         } else {
             return Err(new Error(`failed to load contents of ${path}`));
         }
@@ -172,18 +163,4 @@ export function map_eq<K, V>(map1: Map<K, V>, map2: Map<K, V>) {
     }
 
     return true;
-}
-
-export function os_release(): null | string {
-    const [ok, bytes] = GLib.file_get_contents('/etc/os-release');
-    if (!ok) return null;
-
-    const contents: string = imports.byteArray.toString(bytes);
-    for (const line of contents.split('\n')) {
-        if (line.startsWith('VERSION_ID')) {
-            return line.split('"')[1];
-        }
-    }
-
-    return null;
 }

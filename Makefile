@@ -8,20 +8,17 @@ endif
 
 ifeq ($(strip $(DESTDIR)),)
 INSTALLBASE = $(XDG_DATA_HOME)/gnome-shell/extensions
-PLUGIN_BASE = $(XDG_DATA_HOME)/pop-shell/launcher
-SCRIPTS_BASE = $(XDG_DATA_HOME)/pop-shell/scripts
 else
 INSTALLBASE = $(DESTDIR)/usr/share/gnome-shell/extensions
-PLUGIN_BASE = $(DESTDIR)/usr/lib/pop-shell/launcher
-SCRIPTS_BASE = $(DESTDIR)/usr/lib/pop-shell/scripts
 endif
+USER_SCHEMAS = $(XDG_DATA_HOME)/glib-2.0/schemas
 INSTALLNAME = $(UUID)
 
 PROJECTS = color_dialog floating_exceptions
 
 $(info UUID is "$(UUID)")
 
-.PHONY: all clean install zip-file
+.PHONY: all clean install zip-file local-install user-schemas restart-shell nested
 
 sources = src/*.ts *.css
 
@@ -37,8 +34,8 @@ configure:
 compile: $(sources) clean
 	env PROJECTS="$(PROJECTS)" ./scripts/transpile.sh
 
-# Rebuild, install, reconfigure local settings, restart shell, and listen to journalctl logs
-debug: depcheck compile install configure enable restart-shell listen
+# Rebuild, install, and listen to journalctl logs
+debug: depcheck compile install user-schemas enable restart-shell listen
 
 depcheck:
 	@echo depcheck
@@ -57,33 +54,30 @@ disable:
 listen:
 	journalctl -o cat -n 0 -f "$$(which gnome-shell)" | grep -v warning
 
-local-install: depcheck compile install configure restart-shell enable
+# Rebuild and install for this user. Does not run `configure`, which
+# rewrites GNOME keybindings and mutter settings.
+local-install: depcheck compile install user-schemas restart-shell
 
 install:
 	rm -rf $(INSTALLBASE)/$(INSTALLNAME)
-	mkdir -p $(INSTALLBASE)/$(INSTALLNAME) $(PLUGIN_BASE) $(SCRIPTS_BASE)
+	mkdir -p $(INSTALLBASE)/$(INSTALLNAME)
 	cp -r _build/* $(INSTALLBASE)/$(INSTALLNAME)/
+
+# Recompile the user schema directory, where the schema may be symlinked
+# so that the gsettings command line sees new keys.
+user-schemas:
+	@if [ -d "$(USER_SCHEMAS)" ]; then glib-compile-schemas "$(USER_SCHEMAS)"; fi
 
 uninstall:
 	rm -rf $(INSTALLBASE)/$(INSTALLNAME)
 
+# GNOME Shell on Wayland cannot restart in place
 restart-shell:
-	@echo "Restart shell!"
-ifneq ($(WAYLAND_DISPLAY),) # Don't restart if WAYLAND_DISPLAY is set
-	@echo "WAYLAND_DISPLAY is set, not restarting shell";
-else
-	if bash -c 'xprop -root &> /dev/null'; then \
-		pkill -HUP gnome-shell; \
-	else \
-		gnome-session-quit --logout; \
-	fi
-	sleep 3
-endif
+	@echo "Log out and back in to load the new pop-shell build (or try it with 'make nested')"
 
-update-repository:
-	git fetch origin
-	git reset --hard origin/master
-	git clean -fd
+# Run a nested GNOME Shell with the installed build, without logging out
+nested:
+	dbus-run-session -- gnome-shell --devkit --wayland
 
 zip-file: all
 	cd _build && zip -qr "../$(UUID)_$(VERSION).zip" .

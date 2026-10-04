@@ -13,7 +13,6 @@ import * as Rect from './rectangle.js';
 import * as Settings from './settings.js';
 import * as Tiling from './tiling.js';
 import * as Window from './window.js';
-import * as launcher from './launcher.js';
 import * as auto_tiler from './auto_tiler.js';
 import * as node from './node.js';
 import * as utils from './utils.js';
@@ -26,6 +25,8 @@ import * as dbus_service from './dbus_service.js';
 import { BorderStyle } from './border.js';
 import { Workspaces } from './workspaces.js';
 import { Pointer } from './pointer.js';
+import { TileAnimator } from './animation.js';
+import { PanelHint } from './panel_hint.js';
 import { NotificationDestroyedReason } from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as scheduler from './scheduler.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
@@ -33,7 +34,6 @@ import type { Entity } from './ecs.js';
 import type { ExtEvent } from './events.js';
 import { Rectangle } from './rectangle.js';
 import type { Indicator } from './panel_settings.js';
-import type { Launcher } from './launcher.js';
 
 import { Fork } from './fork.js';
 
@@ -49,13 +49,7 @@ import Gdk from 'gi://Gdk';
 import St from 'gi://St';
 import Shell from 'gi://Shell';
 import Meta from 'gi://Meta';
-// Try to import Mtk for newer GNOME versions, fallback to Meta for older versions
-let Mtk: any;
-try {
-    Mtk = imports.gi.Mtk;
-} catch (e) {
-    Mtk = null;
-}
+import Mtk from 'gi://Mtk';
 const { GlobalEvent, WindowEvent } = Events;
 const { cursor_rect, is_keyboard_op, is_resize_op, is_move_op } = Lib;
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -79,13 +73,11 @@ import {
 import { Workspace } from 'resource:///org/gnome/shell/ui/workspace.js';
 import { WorkspaceThumbnail } from 'resource:///org/gnome/shell/ui/workspaceThumbnail.js';
 import { WindowPreview } from 'resource:///org/gnome/shell/ui/windowPreview.js';
-import { PACKAGE_VERSION } from 'resource:///org/gnome/shell/misc/config.js';
 import * as Tags from './tags.js';
 import { get_current_path } from './paths.js';
 
 const STYLESHEET_PATHS = ['light', 'dark', 'highcontrast'].map(stylesheet_path);
 const STYLESHEETS = STYLESHEET_PATHS.map((path) => Gio.File.new_for_path(path));
-const GNOME_VERSION = PACKAGE_VERSION;
 
 enum Style {
     Light,
@@ -120,16 +112,10 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** An overlay which shows a preview of where a window will be moved */
     overlay: St.Widget = new St.BoxLayout({ style_class: 'pop-shell-overlay', visible: false });
 
-    /** The application launcher, focus search, and calculator dialog */
-    window_search: Launcher = new launcher.Launcher(this);
-
     /** DBus */
     dbus: dbus_service.Service = new dbus_service.Service();
 
     // State
-
-    /** Animate window movements */
-    animate_windows: boolean = true;
 
     button: any = null;
     button_gio_icon_auto_on: any = null;
@@ -157,6 +143,12 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** The current scaling factor in GNOME Shell */
     dpi: number = St.ThemeContext.get_for_stage(global.stage).scale_factor;
 
+    /** The active hint drawn around the top bar */
+    panel_hint: PanelHint = new PanelHint(this);
+
+    /** Eases tiled windows into place */
+    animator: TileAnimator = new TileAnimator(this);
+
     /** Pointer follows focus, and the slow-mouse focus fix */
     pointer: Pointer = new Pointer(this);
 
@@ -166,8 +158,14 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Precomputed border styles for focused and unfocused windows */
     border_styles: { active: BorderStyle; inactive: BorderStyle } = this.create_border_styles();
 
+    /** Cached inline styles for stack tabs, following the hint colors */
+    tab_styles: { active: string; inactive: string; urgent: string } = this.create_tab_styles();
+
     /** Pending BEFORE_REDRAW later which refreshes every border once */
     private border_later: number | null = null;
+
+    /** Set when the window stack changed and stack tabs must follow, before the next frame */
+    private stacks_dirty: boolean = false;
 
     drag_signal: null | SignalID = null;
 
@@ -214,7 +212,8 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Record of misc. global objects and their attached signals */
     private signals: Map<GObject.Object, Array<SignalID>> = new Map();
 
-    private size_requests: Map<GObject.Object, SignalID> = new Map();
+    /** Pending debounced size events: one timeout per window and its current deadline (µs) */
+    private size_requests: Map<GObject.Object, { deadline: number; source: SignalID }> = new Map();
 
     /** Stores windows that were focused on a workspace */
     private workspace_active: Map<number, null | Entity> = new Map();
@@ -273,6 +272,16 @@ export class Ext extends Ecs.System<ExtEvent> {
             this.settings.int.connect('changed::gtk-theme', () => {
                 this.register(Events.global(GlobalEvent.GtkThemeChanged));
             });
+
+            this.settings.int.connect('changed::color-scheme', () => {
+                this.register(Events.global(GlobalEvent.GtkThemeChanged));
+            });
+        }
+
+        if (this.settings.a11y) {
+            this.settings.a11y.connect('changed::high-contrast', () => {
+                this.register(Events.global(GlobalEvent.GtkThemeChanged));
+            });
         }
 
         if (this.settings.shell) {
@@ -285,7 +294,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         this.dbus.FocusDown = () => this.focus_down();
         this.dbus.FocusLeft = () => this.focus_left();
         this.dbus.FocusRight = () => this.focus_right();
-        this.dbus.Launcher = () => this.window_search.open(this);
         this.dbus.ClearNotifications = () => {
             for (const source of Main.messageTray.getSources()) {
                 source.destroy(NotificationDestroyedReason.DISMISSED);
@@ -298,7 +306,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                 target_window.activate();
                 this.on_focused(target_window);
             }
-            this.window_search.close();
         };
 
         this.dbus.WindowList = (): Array<[[number, number], string, string, string]> => {
@@ -314,7 +321,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         this.dbus.WindowQuit = (win: [number, number]) => {
             this.windows.get(win)?.meta.delete(global.get_current_time());
-            this.window_search.close();
         };
     }
 
@@ -353,10 +359,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                     }
 
                     actor.remove_all_transitions();
-                    const { x, y, width, height } = movement;
-
-                    window.meta.move_resize_frame(true, x, y, width, height);
-                    window.meta.move_frame(true, x, y);
+                    this.animator.move(window, actor, movement);
 
                     this.monitors.insert(window.entity, [win.meta.get_monitor(), win.workspace_id()]);
 
@@ -503,22 +506,32 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     connect_window(win: Window.ShellWindow) {
+        // Debounced by 500ms after the last signal. Moves and resizes emit these
+        // continuously, so a pending timeout only has its deadline pushed back.
+        const SIZE_DEBOUNCE_MS = 500;
         const size_event = () => {
-            const old = this.size_requests.get(win.meta);
-
-            if (old) {
-                try {
-                    GLib.source_remove(old);
-                } catch (_) { }
+            const deadline = GLib.get_monotonic_time() + SIZE_DEBOUNCE_MS * 1000;
+            const pending = this.size_requests.get(win.meta);
+            if (pending) {
+                pending.deadline = deadline;
+                return;
             }
 
-            const new_s = GLib.timeout_add(GLib.PRIORITY_LOW, 500, () => {
-                this.register(Events.window_event(win, WindowEvent.Size));
-                this.size_requests.delete(win.meta);
-                return false;
-            });
+            const request = { deadline, source: 0 };
+            const fire = () => {
+                const left = Math.ceil((request.deadline - GLib.get_monotonic_time()) / 1000);
+                if (left > 0) {
+                    request.source = GLib.timeout_add(GLib.PRIORITY_LOW, left, fire);
+                    return false;
+                }
 
-            this.size_requests.set(win.meta, new_s);
+                this.size_requests.delete(win.meta);
+                this.register(Events.window_event(win, WindowEvent.Size));
+                return false;
+            };
+
+            request.source = GLib.timeout_add(GLib.PRIORITY_LOW, SIZE_DEBOUNCE_MS, fire);
+            this.size_requests.set(win.meta, request);
         };
 
         this.connect_meta(win, 'workspace-changed', () => {
@@ -592,7 +605,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                 try {
                     const [bytes] = stdout.read_line_finish(res);
                     if (bytes) {
-                        if (event_handler((imports.byteArray.toString(bytes) as string).trim())) {
+                        if (event_handler(new TextDecoder().decode(bytes).trim())) {
                             ipc.stdout.read_line_async(0, ipc.cancellable, generator);
                         }
                     }
@@ -615,8 +628,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     exit_modes() {
         this.tiler.exit(this);
-        this.window_search.reset();
-        this.window_search.close();
         this.overlay.visible = false;
     }
 
@@ -931,10 +942,10 @@ export class Ext extends Ecs.System<ExtEvent> {
             ) {
                 if (prev.rect().contains(win.rect())) {
                     if (prev.is_maximized()) {
-                        prev.meta.unmaximize(Meta.MaximizeFlags.BOTH);
+                        prev.meta.unmaximize();
                     }
                 } else if (prev.stack) {
-                    prev.meta.unmaximize(Meta.MaximizeFlags.BOTH);
+                    prev.meta.unmaximize();
                     this.auto_tiler.forest.stacks.get(prev.stack)?.restack();
                 }
             }
@@ -949,7 +960,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                 `  name: ${win.name(this)},\n` +
                 `  rect: ${win.rect().fmt()},\n` +
                 `  workspace: ${win.workspace_id()},\n` +
-                `  xid: ${win.xid()},\n` +
                 `  stack: ${win.stack},\n`;
 
             if (this.auto_tiler) {
@@ -995,6 +1005,12 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     update_borders() {
+        // Stack tabs first: borders stack above them.
+        if (this.stacks_dirty) {
+            this.stacks_dirty = false;
+            for (const stack of this.auto_tiler?.forest.stacks.values() ?? []) stack.restack();
+        }
+
         this.pointer.invalidate_hover();
         const focus = this.focus_window();
         for (const win of this.windows.values()) {
@@ -1075,9 +1091,32 @@ export class Ext extends Ecs.System<ExtEvent> {
         };
     }
 
+    /**
+     * Active tabs carry the active hint gradient, inactive ones the
+     * unfocused hint color; urgent tabs keep their stylesheet color.
+     */
+    create_tab_styles(): { active: string; inactive: string; urgent: string } {
+        const s = this.settings;
+        const start = s.hint_color_rgba();
+        const end = s.hint_color_end_rgba();
+        const text = (color: string) => (utils.is_dark(color) ? 'white' : 'black');
+
+        return {
+            active:
+                `background-gradient-direction: horizontal; background-gradient-start: ${start}; ` +
+                `background-gradient-end: ${end}; color: ${text(start)};`,
+            inactive: `background-color: ${s.inactive_hint_color_rgba()}; color: white;`,
+            urgent: '',
+        };
+    }
+
     /** Rebuilds border styles after a settings or scale change */
     update_border_styles() {
         this.border_styles = this.create_border_styles();
+        this.tab_styles = this.create_tab_styles();
+        for (const stack of this.auto_tiler?.forest.stacks.values() ?? []) stack.restyle();
+        this.panel_hint.update();
+        this.refresh_gaps();
         this.update_overlay_color();
         this.schedule_border_update();
     }
@@ -1106,14 +1145,7 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     on_gap_inner() {
-        let current = this.settings.gap_inner();
-        this.set_gap_inner(current);
-        let prev_gap = this.gap_inner_prev / 4 / this.dpi;
-
-        if (current != prev_gap) {
-            this.update_inner_gap();
-            Gio.Settings.sync();
-        }
+        this.refresh_gaps();
     }
 
     update_inner_gap() {
@@ -1152,25 +1184,14 @@ export class Ext extends Ecs.System<ExtEvent> {
                     compare.is_maximized() &&
                     win.entity[0] !== compare.entity[0]
                 ) {
-                    compare.meta.unmaximize(Meta.MaximizeFlags.BOTH);
+                    compare.meta.unmaximize();
                 }
             }
         }
     }
 
     on_gap_outer() {
-        let current = this.settings.gap_outer();
-        this.set_gap_outer(current);
-
-        let prev_gap = this.gap_outer_prev / 4 / this.dpi;
-        let diff = current - prev_gap;
-
-        if (diff != 0) {
-            this.set_gap_outer(current);
-            this.update_outer_gap(diff);
-
-            Gio.Settings.sync();
-        }
+        this.refresh_gaps();
     }
 
     update_outer_gap(diff: number) {
@@ -1376,9 +1397,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
             if (this.auto_tiler) {
                 if (this.is_floating(win)) {
-                    win.meta.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                    win.meta.unmaximize(Meta.MaximizeFlags.VERTICAL);
-                    win.meta.unmaximize(Meta.MaximizeFlags.BOTH);
+                    win.meta.unmaximize();
                 }
 
                 this.register(Events.window_move(this, win, rect));
@@ -1386,7 +1405,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                 win.move(this, rect, () => { });
                 // if the resulting dimensions of rect == next
                 if (rect.width == next_area.width && rect.height == next_area.height) {
-                    win.meta.maximize(Meta.MaximizeFlags.BOTH);
+                    win.meta.maximize();
                 }
             }
         }
@@ -1782,24 +1801,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         this.unset_grab_op();
     }
 
-    on_show_window_titles() {
-        const show_title = this.settings.show_title();
-
-        if (indicator) {
-            indicator.toggle_titles.setToggleState(show_title);
-        }
-
-        for (const window of this.windows.values()) {
-            if (window.is_client_decorated()) continue;
-
-            if (show_title) {
-                window.decoration_show(this);
-            } else {
-                window.decoration_hide(this);
-            }
-        }
-    }
-
     on_smart_gap() {
         if (this.auto_tiler) {
             const smart_gaps = this.settings.smart_gaps();
@@ -1822,6 +1823,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                     win.border = null;
                 }
 
+                this.animator.finish(window);
                 this.workspace_rules.on_window_destroyed(window);
                 this.pointer.forget(window);
 
@@ -1962,15 +1964,50 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
     }
 
+    /**
+     * Width of the borders drawn outside window frames, in stage pixels, or
+     * 0 if no border is shown. Gaps include it, so that the configured gaps
+     * are the space visible between borders, and between borders and the
+     * screen edge.
+     */
+    hint_gap(): number {
+        const s = this.settings;
+        return s.active_hint() || s.inactive_hint() ? this.border_styles.active.width : 0;
+    }
+
     set_gap_inner(gap: number) {
         this.gap_inner_prev = this.gap_inner;
-        this.gap_inner = gap * 4 * this.dpi;
+        this.gap_inner = gap * 4 * this.dpi + 2 * this.hint_gap();
         this.gap_inner_half = this.gap_inner / 2;
     }
 
     set_gap_outer(gap: number) {
         this.gap_outer_prev = this.gap_outer;
-        this.gap_outer = gap * 4 * this.dpi;
+        this.gap_outer = gap * 4 * this.dpi + this.hint_gap();
+    }
+
+    /** Recomputes both gaps and retiles every tree from its monitor's work area, if they changed */
+    refresh_gaps() {
+        const [inner, outer] = [this.gap_inner, this.gap_outer];
+        this.set_gap_inner(this.settings.gap_inner());
+        this.set_gap_outer(this.settings.gap_outer());
+        if (inner === this.gap_inner && outer === this.gap_outer) return;
+
+        if (!this.auto_tiler) {
+            this.update_snapped();
+            return;
+        }
+
+        for (const f of this.auto_tiler.forest.forks.values()) {
+            if (!f.is_toplevel) continue;
+
+            const display = this.monitor_work_area(f.monitor);
+            if (!display) continue;
+
+            f.smart_gapped = false;
+            f.set_area(new Rect.Rectangle([display.x, display.y, display.width, display.height]));
+            this.auto_tiler.update_toplevel(this, f, f.monitor, this.settings.smart_gaps());
+        }
     }
 
     set_overlay(rect: Rectangle) {
@@ -2025,15 +2062,24 @@ export class Ext extends Ecs.System<ExtEvent> {
                 case 'active-hint':
                     if (indicator) indicator.toggle_active.setToggleState(this.settings.active_hint());
 
+                    this.refresh_gaps();
                     this.schedule_border_update();
                     break;
                 case 'inactive-hint':
                     if (indicator) indicator.toggle_inactive.setToggleState(this.settings.inactive_hint());
 
+                    this.refresh_gaps();
                     this.schedule_border_update();
                     break;
                 case 'inactive-dim':
                     this.schedule_border_update();
+                    break;
+                case 'panel-hint':
+                    this.panel_hint.sync();
+                    break;
+                case 'animate-tiling':
+                    if (indicator) indicator.toggle_animations.setToggleState(this.settings.animate_tiling());
+                    if (!this.settings.animate_tiling()) this.animator.finish_all();
                     break;
                 case 'float-above':
                     this.sync_all_float_above();
@@ -2058,9 +2104,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                     break;
                 case 'gap-outer':
                     this.on_gap_outer();
-                    break;
-                case 'show-title':
-                    this.on_show_window_titles();
                     break;
                 case 'smart-gaps':
                     this.on_smart_gap();
@@ -2194,24 +2237,13 @@ export class Ext extends Ecs.System<ExtEvent> {
             this.register({ tag: 3, window });
         });
 
-        if (GNOME_VERSION?.startsWith('3.')) {
-            this.connect(display, 'grab-op-begin', (_, _display, win, op) => {
-                this.on_grab_start(win, op);
-            });
+        this.connect(display, 'grab-op-begin', (_display, win, op) => {
+            this.on_grab_start(win, op);
+        });
 
-            this.connect(display, 'grab-op-end', (_, _display, win, op) => {
-                this.register_fn(() => this.on_grab_end(win, op));
-            });
-        } else {
-            // GNOME 40 removed the first argument of the callback
-            this.connect(display, 'grab-op-begin', (_display, win, op) => {
-                this.on_grab_start(win, op);
-            });
-
-            this.connect(display, 'grab-op-end', (_display, win, op) => {
-                this.register_fn(() => this.on_grab_end(win, op));
-            });
-        }
+        this.connect(display, 'grab-op-end', (_display, win, op) => {
+            this.register_fn(() => this.on_grab_end(win, op));
+        });
 
         this.connect(overview, 'window-drag-begin', (_, win) => {
             this.on_grab_start(win, 1);
@@ -2230,6 +2262,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
 
         this.connect(display, 'restacked', () => {
+            this.stacks_dirty = true;
             this.schedule_border_update();
         });
 
@@ -2319,10 +2352,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Switch to a workspace by its index */
     switch_to_workspace(id: number) {
         this.workspace_by_id(id)?.activate(global.get_current_time());
-    }
-
-    stop_launcher_services() {
-        this.window_search.stop_services(this);
     }
 
     tab_list(tablist: number, workspace: Meta.Workspace | null): Array<Window.ShellWindow> {
@@ -2809,10 +2838,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     cursor_status(): [Rectangle, number] {
         const cursor = cursor_rect();
-        // Use Mtk.Rectangle if available (newer GNOME), otherwise fallback to Meta.Rectangle
-        const rect = Mtk ?
-            new Mtk.Rectangle({ x: cursor.x, y: cursor.y, width: 1, height: 1 }) :
-            new Meta.Rectangle({ x: cursor.x, y: cursor.y, width: 1, height: 1 });
+        const rect = new Mtk.Rectangle({ x: cursor.x, y: cursor.y, width: 1, height: 1 });
         const monitor = display.get_monitor_index_for_rect(rect);
         return [cursor, monitor];
     }
@@ -2884,6 +2910,7 @@ export default class PopShellExtension extends Extension {
         ext.injections_add();
         ext.signals_attach();
         ext.pointer.enable();
+        ext.panel_hint.enable();
         ext.workspace_rules.startup();
 
         disable_window_attention_handler();
@@ -2915,11 +2942,11 @@ export default class PopShellExtension extends Extension {
             ext.injections_remove();
             ext.signals_remove();
             ext.exit_modes();
-            ext.stop_launcher_services();
+            ext.animator.finish_all();
+            ext.panel_hint.disable();
             ext.destroy_all_borders();
             ext.release_float_above();
             ext.pointer.disable();
-            ext.window_search.remove_injections();
 
             layoutManager.removeChrome(ext.overlay);
 
@@ -3015,7 +3042,6 @@ let default_isoverviewwindow_ws_thumbnail: any;
 let default_init_appswitcher: any;
 let default_getwindowlist_windowswitcher: any;
 let default_getcaption_windowpreview: any;
-let default_getcaption_workspace: any;
 
 /**
  * Decorates the default gnome-shell workspace/overview handling
@@ -3040,41 +3066,20 @@ function _show_skip_taskbar_windows(ext: Ext) {
     if (!default_isoverviewwindow_ws) {
         default_isoverviewwindow_ws = Workspace.prototype._isOverviewWindow;
         Workspace.prototype._isOverviewWindow = function (win: any) {
-            let meta_win = win;
-            if (GNOME_VERSION?.startsWith('3.36')) meta_win = win.get_meta_window();
-            return is_valid_minimize_to_tray(meta_win, ext) || default_isoverviewwindow_ws(win);
+            return is_valid_minimize_to_tray(win, ext) || default_isoverviewwindow_ws(win);
         };
     }
 
     // Handle _getCaption errors
-    if (GNOME_VERSION?.startsWith('3.36')) {
-        // imports.ui.windowPreview is not in 3.36,
-        // _getCaption() is still in workspace.js
-        if (!default_getcaption_workspace) {
-            default_getcaption_workspace = Workspace.prototype._getCaption;
-            // 3.36 _getCaption
-            Workspace.prototype._getCaption = function () {
-                let metaWindow = this._windowClone.metaWindow;
-                if (metaWindow.title) return metaWindow.title;
+    if (!default_getcaption_windowpreview) {
+        default_getcaption_windowpreview = WindowPreview.prototype._getCaption;
+        WindowPreview.prototype._getCaption = function () {
+            if (this.metaWindow.title) return this.metaWindow.title;
 
-                let tracker = Shell.WindowTracker.get_default();
-                let app = tracker.get_window_app(metaWindow);
-                return app ? app.get_name() : '';
-            };
-        }
-    } else {
-        if (!default_getcaption_windowpreview) {
-            default_getcaption_windowpreview = WindowPreview.prototype._getCaption;
-            log.debug(`override workspace._getCaption`);
-            // 3.38 _getCaption
-            WindowPreview.prototype._getCaption = function () {
-                if (this.metaWindow.title) return this.metaWindow.title;
-
-                let tracker = Shell.WindowTracker.get_default();
-                let app = tracker.get_window_app(this.metaWindow);
-                return app ? app.get_name() : '';
-            };
-        }
+            let tracker = Shell.WindowTracker.get_default();
+            let app = tracker.get_window_app(this.metaWindow);
+            return app ? app.get_name() : '';
+        };
     }
 
     // Handle the workspace thumbnail
@@ -3184,16 +3189,9 @@ function _hide_skip_taskbar_windows() {
         default_isoverviewwindow_ws = null;
     }
 
-    if (GNOME_VERSION?.startsWith('3.36')) {
-        if (default_getcaption_workspace) {
-            Workspace.prototype._getCaption = default_getcaption_workspace;
-            default_getcaption_workspace = null;
-        }
-    } else {
-        if (default_getcaption_windowpreview) {
-            WindowPreview.prototype._getCaption = default_getcaption_windowpreview;
-            default_getcaption_windowpreview = null;
-        }
+    if (default_getcaption_windowpreview) {
+        WindowPreview.prototype._getCaption = default_getcaption_windowpreview;
+        default_getcaption_windowpreview = null;
     }
 
     if (default_isoverviewwindow_ws_thumbnail) {

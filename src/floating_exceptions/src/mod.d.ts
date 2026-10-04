@@ -9,3 +9,8 @@ declare module 'gi://Gtk?version=3.0' {
     let Gtk: any;
     export default Gtk;
 }
+
+declare class TextDecoder {
+    constructor(label?: string);
+    decode(input?: Uint8Array): string;
+}

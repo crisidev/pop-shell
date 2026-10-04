@@ -9,7 +9,6 @@ import * as log from './log.js';
 import * as focus from './focus.js';
 
 interface AppWidgets {
-    fullscreen_launcher: any;
     stacking_with_mouse: any;
     inner_gap: any;
     mouse_cursor_follows_active_window: any;
@@ -17,7 +16,6 @@ interface AppWidgets {
     show_skip_taskbar: any;
     smart_gaps: any;
     snap_to_grid: any;
-    window_titles: any;
     mouse_cursor_focus_position: any;
     log_level: any;
     max_window_width: any;
@@ -41,12 +39,6 @@ function settings_dialog_new(): Gtk.Container {
     let [app, grid] = settings_dialog_view();
 
     let ext = new settings.ExtensionSettings();
-
-    app.window_titles.set_active(ext.show_title());
-    app.window_titles.connect('state-set', (_widget: any, state: boolean) => {
-        ext.set_show_title(state);
-        Settings.sync();
-    });
 
     app.snap_to_grid.set_active(ext.snap_to_grid());
     app.snap_to_grid.connect('state-set', (_widget: any, state: boolean) => {
@@ -102,12 +94,6 @@ function settings_dialog_new(): Gtk.Container {
         ext.set_mouse_cursor_focus_location(active_id);
     });
 
-    app.fullscreen_launcher.set_active(ext.fullscreen_launcher());
-    app.fullscreen_launcher.connect('state-set', (_widget: any, state: boolean) => {
-        ext.set_fullscreen_launcher(state);
-        Settings.sync();
-    });
-
     app.stacking_with_mouse.set_active(ext.stacking_with_mouse());
     app.stacking_with_mouse.connect('state-set', (_widget: any, state: boolean) => {
         ext.set_stacking_with_mouse(state);
@@ -136,15 +122,10 @@ function settings_dialog_view(): [AppWidgets, Gtk.Container] {
         margin_top: 10,
     });
 
-    const win_label = new Gtk.Label({
-        label: 'Show Window Titles',
-        xalign: 0.0,
-        hexpand: true,
-    });
-
     const snap_label = new Gtk.Label({
         label: 'Snap to Grid (Floating Mode)',
         xalign: 0.0,
+        hexpand: true,
     });
 
     const smart_label = new Gtk.Label({
@@ -159,11 +140,6 @@ function settings_dialog_view(): [AppWidgets, Gtk.Container] {
 
     const mouse_cursor_follows_active_window_label = new Gtk.Label({
         label: 'Mouse Cursor Follows Active Window',
-        xalign: 0.0,
-    });
-
-    const fullscreen_launcher_label = new Gtk.Label({
-        label: 'Allow launcher over fullscreen window',
         xalign: 0.0,
     });
 
@@ -182,11 +158,9 @@ function settings_dialog_view(): [AppWidgets, Gtk.Container] {
     const settings = {
         inner_gap,
         outer_gap,
-        fullscreen_launcher: new Gtk.Switch({ halign: Gtk.Align.END }),
         stacking_with_mouse: new Gtk.Switch({ halign: Gtk.Align.END }),
         smart_gaps: new Gtk.Switch({ halign: Gtk.Align.END }),
         snap_to_grid: new Gtk.Switch({ halign: Gtk.Align.END }),
-        window_titles: new Gtk.Switch({ halign: Gtk.Align.END }),
         show_skip_taskbar: new Gtk.Switch({ halign: Gtk.Align.END }),
         mouse_cursor_follows_active_window: new Gtk.Switch({ halign: Gtk.Align.END }),
         mouse_cursor_focus_position: build_combo(grid, 7, focus.FocusPosition, 'Mouse Cursor Focus Position'),
@@ -194,17 +168,11 @@ function settings_dialog_view(): [AppWidgets, Gtk.Container] {
         max_window_width: number_entry(),
     };
 
-    grid.attach(win_label, 0, 0, 1, 1);
-    grid.attach(settings.window_titles, 1, 0, 1, 1);
-
     grid.attach(snap_label, 0, 1, 1, 1);
     grid.attach(settings.snap_to_grid, 1, 1, 1, 1);
 
     grid.attach(smart_label, 0, 2, 1, 1);
     grid.attach(settings.smart_gaps, 1, 2, 1, 1);
-
-    grid.attach(fullscreen_launcher_label, 0, 3, 1, 1);
-    grid.attach(settings.fullscreen_launcher, 1, 3, 1, 1);
 
     grid.attach(stacking_with_mouse, 0, 4, 1, 1);
     grid.attach(settings.stacking_with_mouse, 1, 4, 1, 1);

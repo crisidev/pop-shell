@@ -58,6 +58,7 @@ const ACTIVE_HINT = 'active-hint';
 const ACTIVE_HINT_BORDER_RADIUS = 'active-hint-border-radius';
 const ACTIVE_HINT_BORDER_WIDTH = 'active-hint-border-width';
 const INACTIVE_HINT = 'inactive-hint';
+const PANEL_HINT = 'panel-hint';
 const INACTIVE_HINT_COLOR_RGBA = 'inactive-hint-color-rgba';
 const INACTIVE_HINT_COLOR_END_RGBA = 'inactive-hint-color-end-rgba';
 const INACTIVE_DIM = 'inactive-dim';
@@ -67,14 +68,12 @@ const EDGE_TILING = 'edge-tiling';
 const FLOAT_ABOVE = 'float-above';
 const FLOAT_CENTER = 'float-center';
 const FLOAT_MIN_SIZE = 'float-min-size';
-const FULLSCREEN_LAUNCHER = 'fullscreen-launcher';
 const WORKSPACE_RULES = 'workspace-rules';
 const WORKSPACE_BACK_AND_FORTH = 'workspace-back-and-forth';
 const STARTUP_WORKSPACE = 'startup-workspace';
 const GAP_INNER = 'gap-inner';
 const GAP_OUTER = 'gap-outer';
 const ROW_SIZE = 'row-size';
-const SHOW_TITLE = 'show-title';
 const SMART_GAPS = 'smart-gaps';
 const SNAP_TO_GRID = 'snap-to-grid';
 const TILE_BY_DEFAULT = 'tile-by-default';
@@ -87,6 +86,8 @@ const MOUSE_CURSOR_FOLLOWS_ACTIVE_WINDOW = 'mouse-cursor-follows-active-window';
 const MOUSE_CURSOR_FOCUS_LOCATION = 'mouse-cursor-focus-location';
 const MAX_WINDOW_WIDTH = 'max-window-width';
 const MOUSE_CURSOR_WARP_TO_LAST_POSITION = 'mouse-cursor-warp-to-last-position';
+const ANIMATE_TILING = 'animate-tiling';
+const ANIMATION_DURATION = 'animation-duration';
 const FOCUS_FOLLOWS_MOUSE_FIX = 'focus-follows-mouse-fix';
 
 function valid_color_or(rgba: string, fallback: string): string {
@@ -96,6 +97,7 @@ function valid_color_or(rgba: string, fallback: string): string {
 export class ExtensionSettings {
     ext: Settings = settings_new_schema('org.gnome.shell.extensions.pop-shell');
     int: Settings | null = settings_new_id('org.gnome.desktop.interface');
+    a11y: Settings | null = settings_new_id('org.gnome.desktop.a11y.interface');
     mutter: Settings | null = settings_new_id('org.gnome.mutter');
     shell: Settings | null = settings_new_id('org.gnome.shell.extensions.user-theme');
 
@@ -111,6 +113,10 @@ export class ExtensionSettings {
 
     active_hint_border_width(): number {
         return this.ext.get_uint(ACTIVE_HINT_BORDER_WIDTH);
+    }
+
+    panel_hint(): boolean {
+        return this.ext.get_boolean(PANEL_HINT);
     }
 
     inactive_hint(): boolean {
@@ -172,10 +178,6 @@ export class ExtensionSettings {
         return this.ext.get_uint(STARTUP_WORKSPACE);
     }
 
-    fullscreen_launcher(): boolean {
-        return this.ext.get_boolean(FULLSCREEN_LAUNCHER);
-    }
-
     gap_inner(): number {
         return this.ext.get_uint(GAP_INNER);
     }
@@ -204,21 +206,19 @@ export class ExtensionSettings {
         return this.shell ? this.shell.get_string('name') : this.int ? this.int.get_string('gtk-theme') : 'Adwaita';
     }
 
+    /** Dark if the desktop prefers a dark style, or the theme name says so */
     is_dark(): boolean {
+        if (this.int?.get_string('color-scheme') === 'prefer-dark') return true;
         const theme = this.theme().toLowerCase();
         return DARK.some((dark) => theme.includes(dark));
     }
 
     is_high_contrast(): boolean {
-        return this.theme().toLowerCase() === 'highcontrast';
+        return this.a11y?.get_boolean('high-contrast') || this.theme().toLowerCase() === 'highcontrast';
     }
 
     row_size(): number {
         return this.ext.get_uint(ROW_SIZE);
-    }
-
-    show_title(): boolean {
-        return this.ext.get_boolean(SHOW_TITLE);
     }
 
     smart_gaps(): boolean {
@@ -253,6 +253,14 @@ export class ExtensionSettings {
         return this.ext.get_uint(MOUSE_CURSOR_FOCUS_LOCATION);
     }
 
+    animate_tiling(): boolean {
+        return this.ext.get_boolean(ANIMATE_TILING);
+    }
+
+    animation_duration(): number {
+        return this.ext.get_uint(ANIMATION_DURATION);
+    }
+
     mouse_cursor_warp_to_last_position(): boolean {
         return this.ext.get_boolean(MOUSE_CURSOR_WARP_TO_LAST_POSITION);
     }
@@ -279,6 +287,10 @@ export class ExtensionSettings {
         this.ext.set_uint(ACTIVE_HINT_BORDER_WIDTH, set);
     }
 
+    set_animate_tiling(set: boolean) {
+        this.ext.set_boolean(ANIMATE_TILING, set);
+    }
+
     set_inactive_hint(set: boolean) {
         this.ext.set_boolean(INACTIVE_HINT, set);
     }
@@ -293,10 +305,6 @@ export class ExtensionSettings {
 
     set_edge_tiling(enable: boolean) {
         this.mutter?.set_boolean(EDGE_TILING, enable);
-    }
-
-    set_fullscreen_launcher(enable: boolean) {
-        this.ext.set_boolean(FULLSCREEN_LAUNCHER, enable);
     }
 
     set_gap_inner(gap: number) {
@@ -319,10 +327,6 @@ export class ExtensionSettings {
 
     set_row_size(size: number) {
         this.ext.set_uint(ROW_SIZE, size);
-    }
-
-    set_show_title(set: boolean) {
-        this.ext.set_boolean(SHOW_TITLE, set);
     }
 
     set_smart_gaps(set: boolean) {
