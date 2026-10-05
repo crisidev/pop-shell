@@ -66,6 +66,11 @@ declare module 'gi://Shell' {
     export default Shell;
 }
 
+declare module 'gi://Cogl' {
+    let Cogl: any;
+    export default Cogl;
+}
+
 declare module 'gi://Mtk' {
     let Mtk: any;
     export default Mtk;
@@ -207,6 +212,8 @@ declare namespace Clutter {
         get_child_at_index(nth: number): Clutter.Actor | null;
         get_n_children(): number;
         get_next_sibling(): Clutter.Actor | null;
+        add_effect_with_name(name: string, effect: any): void;
+        remove_effect_by_name(name: string): void;
         insert_child_above(child: Actor, sibling: Actor | null): void;
         contains(descendant: Clutter.Actor): boolean;
         get_actor_at_pos(mode: number, x: number, y: number): Clutter.Actor | null;

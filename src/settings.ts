@@ -1,5 +1,6 @@
 // const Me = imports.misc.extensionUtils.getCurrentExtension();
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import Gdk from 'gi://Gdk';
 import { get_current_path } from './paths.js';
 
@@ -15,6 +16,7 @@ interface Settings extends GObject.Object {
     get_double(key: string): number;
 
     get_value(key: string): any;
+    set_value(key: string, value: any): boolean;
     set_double(key: string, value: number): void;
 
     get_string(key: string): string;
@@ -59,12 +61,14 @@ const ACTIVE_HINT_BORDER_RADIUS = 'active-hint-border-radius';
 const ACTIVE_HINT_BORDER_WIDTH = 'active-hint-border-width';
 const INACTIVE_HINT = 'inactive-hint';
 const PANEL_HINT = 'panel-hint';
+const ROUND_WINDOWS = 'round-windows';
 const INACTIVE_HINT_COLOR_RGBA = 'inactive-hint-color-rgba';
 const INACTIVE_HINT_COLOR_END_RGBA = 'inactive-hint-color-end-rgba';
 const INACTIVE_DIM = 'inactive-dim';
 const STACKING_WITH_MOUSE = 'stacking-with-mouse';
 const COLUMN_SIZE = 'column-size';
 const EDGE_TILING = 'edge-tiling';
+const FLOAT_RULES = 'float-rules';
 const FLOAT_ABOVE = 'float-above';
 const FLOAT_CENTER = 'float-center';
 const FLOAT_MIN_SIZE = 'float-min-size';
@@ -115,6 +119,10 @@ export class ExtensionSettings {
         return this.ext.get_uint(ACTIVE_HINT_BORDER_WIDTH);
     }
 
+    round_windows(): boolean {
+        return this.ext.get_boolean(ROUND_WINDOWS);
+    }
+
     panel_hint(): boolean {
         return this.ext.get_boolean(PANEL_HINT);
     }
@@ -151,6 +159,19 @@ export class ExtensionSettings {
 
     dynamic_workspaces(): boolean {
         return this.mutter ? this.mutter.get_boolean('dynamic-workspaces') : false;
+    }
+
+    /** (class pattern, title pattern) entries; empty patterns match anything */
+    float_rules(): Array<[string, string]> {
+        return this.ext.get_value(FLOAT_RULES).deep_unpack();
+    }
+
+    /** Appends a float rule unless an identical one exists */
+    add_float_rule(wm_class: string, title: string) {
+        const rules = this.float_rules();
+        if (rules.some(([c, t]) => c === wm_class && t === title)) return;
+        rules.push([wm_class, title]);
+        this.ext.set_value(FLOAT_RULES, new (GLib as any).Variant('a(ss)', rules));
     }
 
     float_above(): boolean {

@@ -58,6 +58,18 @@ export function pointer_button_pressed(): boolean {
     return (mods & buttons) !== 0;
 }
 
+/** True while a keyboard modifier is held, e.g. when focus moves through a keybinding */
+export function modifier_pressed(): boolean {
+    const [, , mods] = global.get_pointer();
+    const modifiers =
+        Clutter.ModifierType.SHIFT_MASK |
+        Clutter.ModifierType.CONTROL_MASK |
+        Clutter.ModifierType.MOD1_MASK |
+        Clutter.ModifierType.SUPER_MASK |
+        Clutter.ModifierType.MOD4_MASK;
+    return (mods & modifiers) !== 0;
+}
+
 export function dbg<T>(value: T): T {
     log.debug(String(value));
     return value;

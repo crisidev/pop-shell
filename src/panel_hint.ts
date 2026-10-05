@@ -38,6 +38,9 @@ export class PanelHint {
             [panel, panel.connect('style-changed', update)],
             [box, box.connect('notify::allocation', update)],
             [box, box.connect('notify::visible', update)],
+            [Main.sessionMode, Main.sessionMode.connect('updated', update)],
+            [Main.overview, Main.overview.connect('showing', update)],
+            [Main.overview, Main.overview.connect('hidden', update)],
         ];
 
         this.update();
@@ -69,7 +72,14 @@ export class PanelHint {
         const node = panel.get_theme_node();
         const color = node.get_border_color(St.Side.TOP);
 
-        if (!box.visible || !panel.visible || color.alpha > 0) {
+        const offIsland =
+            Main.sessionMode.isLocked ||
+            Main.sessionMode.isGreeter ||
+            Main.overview.visible ||
+            panel.has_style_class_name('unlock-screen') ||
+            panel.has_style_class_name('login-screen');
+
+        if (!box.visible || !panel.visible || offIsland || color.alpha > 0) {
             border.hide();
             return;
         }

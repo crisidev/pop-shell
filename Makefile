@@ -14,8 +14,6 @@ endif
 USER_SCHEMAS = $(XDG_DATA_HOME)/glib-2.0/schemas
 INSTALLNAME = $(UUID)
 
-PROJECTS = color_dialog floating_exceptions
-
 $(info UUID is "$(UUID)")
 
 .PHONY: all clean install zip-file local-install user-schemas restart-shell nested
@@ -32,7 +30,7 @@ configure:
 	sh scripts/configure.sh
 
 compile: $(sources) clean
-	env PROJECTS="$(PROJECTS)" ./scripts/transpile.sh
+	./scripts/transpile.sh
 
 # Rebuild, install, and listen to journalctl logs
 debug: depcheck compile install user-schemas enable restart-shell listen

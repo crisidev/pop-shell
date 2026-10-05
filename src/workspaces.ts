@@ -144,7 +144,16 @@ export class Workspaces {
         }
 
         const workspace = global.workspace_manager.get_workspace_by_index(target);
-        if (workspace && target !== this.current) workspace.activate(global.get_current_time());
+        if (!workspace || target === this.current) return;
+
+        // Switch with the target window focused, so focus lands once instead of
+        // going to the workspace's default window first and then moving.
+        const window = this.ext.workspace_target(target);
+        if (window) {
+            workspace.activate_with_focus(window.meta, global.get_current_time());
+        } else {
+            workspace.activate(global.get_current_time());
+        }
     }
 
     /** Handles a `pop-move-workspace-N` keybinding (`index` is 0-based) */

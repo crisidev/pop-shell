@@ -1,6 +1,5 @@
 import * as result from './result.js';
 import * as error from './error.js';
-import * as log from './log.js';
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -78,75 +77,6 @@ export function is_dark(color: string): boolean {
 }
 
 /** Utility function for running a process in the background and fetching its standard output as a string. */
-export function async_process(argv: Array<string>, input = null, cancellable: null | any = null): Promise<string> {
-    let flags = Gio.SubprocessFlags.STDOUT_PIPE;
-
-    if (input !== null) flags |= Gio.SubprocessFlags.STDIN_PIPE;
-
-    let proc = new Gio.Subprocess({ argv, flags });
-    proc.init(cancellable);
-
-    proc.wait_async(null, (source: any, res: any) => {
-        source.wait_finish(res);
-        if (cancellable !== null) {
-            cancellable.cancel();
-        }
-    });
-
-    return new Promise((resolve, reject) => {
-        proc.communicate_utf8_async(input, cancellable, (proc: any, res: any) => {
-            try {
-                let bytes = proc.communicate_utf8_finish(res)[1];
-                resolve(bytes.toString());
-            } catch (e) {
-                reject(e);
-            }
-        });
-    });
-}
-
-export type AsyncIPC = {
-    child: any;
-    stdout: any;
-    stdin: any;
-    cancellable: any;
-};
-
-export function async_process_ipc(argv: Array<string>): AsyncIPC | null {
-    const { SubprocessLauncher, SubprocessFlags } = Gio;
-
-    const launcher = new SubprocessLauncher({
-        flags: SubprocessFlags.STDIN_PIPE | SubprocessFlags.STDOUT_PIPE,
-    });
-
-    let child: any;
-
-    let cancellable = new Gio.Cancellable();
-
-    try {
-        child = launcher.spawnv(argv);
-    } catch (why) {
-        log.error(`failed to spawn ${argv}: ${why}`);
-        return null;
-    }
-
-    let stdin = new Gio.DataOutputStream({
-        base_stream: child.get_stdin_pipe(),
-        close_base_stream: true,
-    });
-
-    let stdout = new Gio.DataInputStream({
-        base_stream: child.get_stdout_pipe(),
-        close_base_stream: true,
-    });
-
-    child.wait_async(null, (source: any, res: any) => {
-        source.wait_finish(res);
-        cancellable.cancel();
-    });
-
-    return { child, stdin, stdout, cancellable };
-}
 
 export function map_eq<K, V>(map1: Map<K, V>, map2: Map<K, V>) {
     if (map1.size !== map2.size) {

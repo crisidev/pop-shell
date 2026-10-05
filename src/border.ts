@@ -67,6 +67,9 @@ export class BorderStyle {
     /** Corner piece size in stage pixels */
     readonly corner: number;
 
+    /** Outer corner radius in stage pixels */
+    readonly radius: number;
+
     constructor(start: string, end: string, width: number, radius: number, scale: number) {
         const s = parse_color(start) ?? { r: 1, g: 1, b: 1, a: 1 };
         const e = parse_color(end) ?? s;
@@ -89,6 +92,7 @@ export class BorderStyle {
 
         this.width = width * scale;
         this.corner = corner * scale;
+        this.radius = radius * scale;
     }
 }
 
@@ -121,6 +125,8 @@ export class Border {
     private geometry: number[] = [];
 
     private ring_visible: boolean = true;
+
+    private overlay_radius: number = 0;
 
     constructor() {
         this.actor.add_child(this.overlay);
@@ -190,6 +196,13 @@ export class Border {
             piece.set_position(px, py);
             piece.set_size(pw, ph);
         });
+    }
+
+    /** Rounds the dim overlay's corners (in logical pixels), to match rounded windows */
+    set_overlay_radius(radius: number) {
+        if (this.overlay_radius === radius) return;
+        this.overlay_radius = radius;
+        this.overlay.set_style(`background-color: black; border-radius: ${radius}px;`);
     }
 
     /** Shows or hides the border ring, leaving the dim overlay alone */

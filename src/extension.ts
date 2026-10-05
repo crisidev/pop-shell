@@ -137,6 +137,9 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Row size in snap-to-grid */
     row_size: number = 32;
 
+    /** Connector name (such as HDMI-A-1) of each monitor index, to follow monitors when indices change */
+    monitor_connectors: Map<number, string> = new Map();
+
     /** The known display configuration, for tracking monitor removals and changes */
     displays: [number, Map<number, Display>] = [global.display.get_primary_monitor(), new Map()];
 
@@ -161,8 +164,14 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Cached inline styles for stack tabs, following the hint colors */
     tab_styles: { active: string; inactive: string; urgent: string } = this.create_tab_styles();
 
+    /** Window focused before the latest focus change, to give focus back to floats */
+    private focused_meta: Meta.Window | null = null;
+
     /** Pending BEFORE_REDRAW later which refreshes every border once */
     private border_later: number | null = null;
+
+    /** Set once the rounded corner effect failed, so it is logged only once */
+    private corners_failed: boolean = false;
 
     /** Set when the window stack changed and stack tabs must follow, before the next frame */
     private stacks_dirty: boolean = false;
@@ -267,6 +276,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         this.register_fn(() => load_theme(this.current_style));
 
         this.conf.reload();
+        this.load_float_rules();
 
         if (this.settings.int) {
             this.settings.int.connect('changed::gtk-theme', () => {
@@ -549,11 +559,17 @@ export class Ext extends Ecs.System<ExtEvent> {
         ]);
     }
 
+    /** Feeds the float-rules setting to the config and re-evaluates every window */
+    load_float_rules() {
+        this.conf.set_extra_float(this.settings.float_rules().map(([c, t]) => ({ class: c || undefined, title: t || undefined })));
+    }
+
     exception_add(win: Window.ShellWindow) {
         this.exception_selecting = false;
+        // The float-rules change handler re-applies tiling.
         let d = new add_exception.AddExceptionDialog(
             // Cancel
-            () => this.exception_dialog(),
+            () => {},
             // this_app
             () => {
                 let wmclass = win.meta.get_wm_class();
@@ -561,61 +577,18 @@ export class Ext extends Ecs.System<ExtEvent> {
                     wmclass = win.name(this);
                 }
 
-                if (wmclass) this.conf.add_app_exception(wmclass);
-                this.exception_dialog();
+                if (wmclass) this.settings.add_float_rule(`^${escape_regex(wmclass)}$`, '');
             },
             // current-window
             () => {
                 let wmclass = win.meta.get_wm_class();
-                if (wmclass) this.conf.add_window_exception(wmclass, win.title());
-                this.exception_dialog();
+                if (wmclass) {
+                    this.settings.add_float_rule(`^${escape_regex(wmclass)}$`, `^${escape_regex(win.title())}$`);
+                }
             },
-            // Reload the tiling config on dialog close
-            () => {
-                this.conf.reload();
-                this.tiling_config_reapply();
-            },
+            () => {},
         );
         d.open();
-    }
-
-    exception_dialog() {
-        let path = get_current_path() + '/floating_exceptions/main.js';
-
-        const event_handler = (event: string): boolean => {
-            switch (event) {
-                case 'MODIFIED':
-                    this.register_fn(() => {
-                        this.conf.reload();
-                        this.tiling_config_reapply();
-                    });
-                    break;
-                case 'SELECT':
-                    this.register_fn(() => this.exception_select());
-                    return false;
-            }
-
-            return true;
-        };
-
-        const ipc = utils.async_process_ipc(['gjs', '--module', path]);
-
-        if (ipc) {
-            const generator = (stdout: any, res: any) => {
-                try {
-                    const [bytes] = stdout.read_line_finish(res);
-                    if (bytes) {
-                        if (event_handler(new TextDecoder().decode(bytes).trim())) {
-                            ipc.stdout.read_line_async(0, ipc.cancellable, generator);
-                        }
-                    }
-                } catch (why) {
-                    log.error(`failed to read response from floating exceptions dialog: ${why}`);
-                }
-            };
-
-            ipc.stdout.read_line_async(0, ipc.cancellable, generator);
-        }
     }
 
     exception_select() {
@@ -804,35 +777,41 @@ export class Ext extends Ecs.System<ExtEvent> {
                 this.prev_focused = [null, window.entity];
             };
 
+            // Keep the focus the switch gave, unless it went to a window on
+            // every workspace (another monitor's): those don't belong to it.
             const focused = this.focus_window();
-            if (focused && focused.same_workspace()) {
+            if (focused && focused.same_workspace() && !focused.meta.is_on_all_workspaces()) {
                 activate_window(focused);
                 return;
             }
 
-            // Activate the last-active window on workspace.
-            const workspace_id = this.active_workspace();
-            const active = this.workspace_active.get(workspace_id);
-            if (active) {
-                const window = this.windows.get(active);
-                if (window && window.meta.get_workspace().index() == workspace_id && !window.meta.minimized) {
-                    activate_window(window);
-                    return;
-                }
-            }
-
-            // If window was not found, activate the first window on workspace.
-            const workspace = wom.get_workspace_by_index(workspace_id);
-            if (workspace) {
-                for (const win of workspace.list_windows()) {
-                    const window = this.get_window(win);
-                    if (window && !window.meta.minimized) {
-                        activate_window(window);
-                        return;
-                    }
-                }
-            }
+            const target = this.workspace_target(this.active_workspace());
+            if (target) activate_window(target);
         });
+    }
+
+    /**
+     * The window to focus on a workspace: the one used last there, or else
+     * its first window; never one that is on every workspace.
+     */
+    workspace_target(workspace_id: number): Window.ShellWindow | null {
+        const usable = (window: Window.ShellWindow | null | undefined): window is Window.ShellWindow =>
+            !!window &&
+            !window.meta.minimized &&
+            !window.meta.is_on_all_workspaces() &&
+            window.meta.get_workspace()?.index() === workspace_id;
+
+        const active = this.workspace_active.get(workspace_id);
+        const last = active ? this.windows.get(active) : null;
+        if (usable(last)) return last;
+
+        const workspace = wom.get_workspace_by_index(workspace_id);
+        for (const meta of workspace?.list_windows() ?? []) {
+            const window = this.get_window(meta);
+            if (usable(window)) return window;
+        }
+
+        return null;
     }
 
     on_destroy(win: Entity) {
@@ -1014,8 +993,35 @@ export class Ext extends Ecs.System<ExtEvent> {
         this.pointer.invalidate_hover();
         const focus = this.focus_window();
         for (const win of this.windows.values()) {
+            try {
+                if (!this.corners_failed) win.refresh_corners();
+            } catch (why) {
+                // Never let the corner effect break the border pass.
+                if (!this.corners_failed) log.error(`rounded corners failed, disabling them: ${why}`);
+                this.corners_failed = true;
+                win.remove_corners();
+            }
             win.refresh_border(win === focus);
         }
+    }
+
+    /**
+     * True if focus moving from `previous` to `next` should be undone: a
+     * float on top keeps focus while the pointer merely leaves it for a
+     * tile (sloppy focus); clicks and keyboard focus changes go through.
+     */
+    float_keeps_focus(previous: Meta.Window | null, next: Window.ShellWindow): boolean {
+        if (!previous || previous === next.meta || !this.settings.float_above()) return false;
+
+        const float = this.get_window(previous);
+        if (!float || !float.made_above || float.meta.minimized || !float.actor_exists()) return false;
+        if (!previous.located_on_workspace(global.workspace_manager.get_active_workspace())) return false;
+
+        // Another float, or a window the pointer isn't on, got focus some other way.
+        if (next.made_above || next.is_floating_toplevel()) return false;
+
+        const [x, y] = global.get_pointer();
+        return next.rect().contains(new Rect.Rectangle([x, y, 1, 1]));
     }
 
     /**
@@ -1070,6 +1076,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         for (const win of this.windows.values()) {
             win.border?.destroy();
             win.border = null;
+            win.remove_corners();
         }
     }
 
@@ -2074,6 +2081,12 @@ export class Ext extends Ecs.System<ExtEvent> {
                 case 'inactive-dim':
                     this.schedule_border_update();
                     break;
+                case 'round-windows':
+                    if (!this.settings.round_windows()) {
+                        for (const win of this.windows.values()) win.remove_corners();
+                    }
+                    this.schedule_border_update();
+                    break;
                 case 'panel-hint':
                     this.panel_hint.sync();
                     break;
@@ -2086,6 +2099,11 @@ export class Ext extends Ecs.System<ExtEvent> {
                     break;
                 case 'workspace-rules':
                     this.workspace_rules.load_rules();
+                    break;
+                case 'float-rules':
+                    this.load_float_rules();
+                    this.tiling_config_reapply();
+                    this.register_fn(() => this.sync_all_float_above());
                     break;
                 case 'focus-follows-mouse-fix':
                 case 'mouse-cursor-warp-to-last-position':
@@ -2163,6 +2181,10 @@ export class Ext extends Ecs.System<ExtEvent> {
             this.connect(display, 'notify::focus-window', () => {
                 // Read now: the button is released by the time the idle callback runs
                 const by_click = Lib.pointer_button_pressed();
+                const by_keyboard = Lib.modifier_pressed();
+
+                const previous = this.focused_meta;
+                this.focused_meta = global.display.get_focus_window();
 
                 // Disallow refocus if a modal window is active
                 if (Main.modalCount !== 0) {
@@ -2199,6 +2221,13 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                     if (meta_window) {
                         const shell_window = this.get_window(meta_window);
+
+                        if (shell_window && !by_click && !by_keyboard && this.float_keeps_focus(previous, shell_window)) {
+                            // The pointer alone moved focus off a float: give it back.
+                            this.pointer.suppress(previous as Meta.Window);
+                            (previous as Meta.Window).focus(global.get_current_time());
+                            return;
+                        }
 
                         if (shell_window) {
                             this.pointer.on_focus_changed(meta_window, by_click);
@@ -2606,6 +2635,20 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         const [old_primary, old_displays] = this.displays;
 
+        // Monitor indices can change on any reconfiguration (saving display
+        // settings renumbers them), so follow monitors by connector. Windows
+        // of a monitor that is gone go to the primary.
+        const old_connectors = this.monitor_connectors;
+        const new_connectors = read_connectors();
+        this.monitor_connectors = new_connectors;
+        const index_of = new Map([...new_connectors].map(([index, connector]) => [connector, index]));
+        const vanished = [...old_connectors.values()].some((connector) => !index_of.has(connector));
+        const follow_connector = (old: number): number | undefined => {
+            const connector = old_connectors.get(old);
+            if (connector === undefined) return undefined;
+            return index_of.get(connector) ?? primary_display;
+        };
+
         const changes = new Map<number, number>();
 
         // Records which display's windows were moved to what new display's ID
@@ -2613,7 +2656,8 @@ export class Ext extends Ecs.System<ExtEvent> {
             if (!w.actor_exists()) continue;
 
             this.monitors.with(entity, ([mon]) => {
-                const assignment = mon === old_primary ? primary_display : w.meta.get_monitor();
+                const assignment =
+                    follow_connector(mon) ?? (mon === old_primary ? primary_display : w.meta.get_monitor());
                 changes.set(mon, assignment);
             });
         }
@@ -2632,10 +2676,35 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         const forest = this.auto_tiler.forest;
 
-        if (old_displays.size === updated.size) {
+        if (old_displays.size === updated.size && !vanished) {
+            // Same monitors, possibly renumbered: move each tree to its monitor's new index.
+            let renumbered = false;
+            for (const f of forest.forks.values()) {
+                if (!f.is_toplevel) continue;
+                const monitor = follow_connector(f.monitor);
+                if (monitor !== undefined && monitor !== f.monitor) {
+                    f.monitor = monitor;
+                    renumbered = true;
+                }
+            }
+
+            if (renumbered) {
+                for (const stack of forest.stacks.values()) {
+                    stack.monitor = follow_connector(stack.monitor) ?? stack.monitor;
+                }
+
+                for (const [entity] of this.windows.iter()) {
+                    this.monitors.with(entity, ([mon, ws]) => {
+                        this.monitors.insert(entity, [follow_connector(mon) ?? mon, ws]);
+                    });
+                }
+            }
+
             update_tiling();
 
             this.displays = [primary_display, updated];
+
+            if (renumbered) this.register_fn(() => this.workspace_rules.rebalance(false));
 
             return;
         }
@@ -3242,4 +3311,32 @@ function is_valid_minimize_to_tray(meta_win: Meta.Window, ext: Ext) {
         !gnome_shell_wm_class;
 
     return valid_min_to_tray;
+}
+
+/** Escapes text for use as a literal inside a regular expression */
+function escape_regex(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Connector name of each connected monitor index, from the DRM connectors in sysfs */
+function read_connectors(): Map<number, string> {
+    const connectors = new Map<number, string>();
+    const manager = global.backend.get_monitor_manager();
+
+    try {
+        const dir = Gio.File.new_for_path('/sys/class/drm');
+        const children = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
+        let info;
+        while ((info = children.next_file(null)) !== null) {
+            const match = /^card\d+-(.+)$/.exec(info.get_name());
+            if (!match) continue;
+            const index = manager.get_monitor_for_connector(match[1]);
+            if (index >= 0) connectors.set(index, match[1]);
+        }
+        children.close(null);
+    } catch (why) {
+        log.warn(`failed to read monitor connectors: ${why}`);
+    }
+
+    return connectors;
 }

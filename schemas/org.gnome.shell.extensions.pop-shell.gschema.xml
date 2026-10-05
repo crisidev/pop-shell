@@ -19,6 +19,11 @@
             <summary>Border width for window hints, in pixels</summary>
         </key>
 
+        <key type="b" name="round-windows">
+            <default>false</default>
+            <summary>Round window corners to match the hints (costs a GPU buffer per visible window)</summary>
+        </key>
+
         <key type="b" name="panel-hint">
             <default>false</default>
             <summary>Draw the active hint around the top bar, while the theme's top bar border is transparent</summary>
@@ -43,6 +48,16 @@
             <default>0.0</default>
             <range min="0.0" max="0.8"/>
             <summary>Opacity of the black overlay dimming unfocused windows (0 disables dimming)</summary>
+        </key>
+
+        <key type="a(ss)" name="float-rules">
+            <default>[]</default>
+            <summary>Windows that float instead of tiling</summary>
+            <description>
+                Each entry is (class, title): case-insensitive regular expressions matched against
+                the window's WM class and title; an empty one matches anything. Checked before the
+                exceptions in ~/.config/pop-shell/config.json and pop-shell's built-in ones.
+            </description>
         </key>
 
         <key type="b" name="float-above">

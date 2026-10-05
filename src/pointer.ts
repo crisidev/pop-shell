@@ -271,6 +271,9 @@ export class Pointer {
         this.dwell = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FOCUS_DWELL_MS, () => {
             this.dwell = null;
             const target = this.hover;
+            const focused = this.ext.focus_window();
+            // A float on top keeps focus until a click (see Ext.float_keeps_focus).
+            if (focused?.made_above && this.ext.settings.float_above()) return GLib.SOURCE_REMOVE;
             if (target && target === win && target !== global.display.get_focus_window()) {
                 target.focus(global.get_current_time());
             }

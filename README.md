@@ -10,8 +10,94 @@ Therefore, we see an opportunity here to advance the usability of the GNOME desk
 
 ---
 
+## About this fork
+
+This is [crisidev/pop-shell](https://github.com/crisidev/pop-shell), a personal fork of Pop Shell for
+**GNOME 49 and 50 on Wayland** (branch `master_noble`). It adds the ricing and workflow features below,
+drops what Wayland-only GNOME no longer needs, and keeps everything configurable through GSettings, so a
+whole setup can be declared in dconf (for example from home-manager).
+
+### Window hints
+
+Borders are drawn from plain St actors (four gradient edges, four rounded corners): no shaders or
+offscreen buffers, and no work per frame.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `active-hint-border-width` | `u` | `3` | Border width in pixels, for focused and unfocused windows |
+| `hint-color-end-rgba` | `s` | `''` | Gradient end color (bottom-right); `hint-color-rgba` is the start (top-left). Empty for a solid color |
+| `inactive-hint` | `b` | `false` | Also draw a border around unfocused windows |
+| `inactive-hint-color-rgba`, `inactive-hint-color-end-rgba` | `s` | | Gradient of the unfocused border |
+| `inactive-dim` | `d` | `0.0` | Opacity of a black overlay over unfocused windows (0 disables) |
+| `panel-hint` | `b` | `false` | Draw the active hint around the top bar while the theme's bar border is transparent |
+
+Sizes follow `text-scaling-factor`. Gaps are measured between borders, so `gap-inner` and `gap-outer`
+are the space you actually see. Stack tabs use the hint colors as well.
+
+### Floating windows
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `float-rules` | `a(ss)` | `[]` | `(class, title)` regular expressions (case-insensitive, `''` matches anything) of windows that float |
+| `float-above` | `b` | `true` | Floats stay above tiles (so sloppy focus doesn't bury them) until another window is clicked |
+| `float-center` | `b` | `true` | New floats, and windows toggled to floating, open centered |
+| `float-min-size` | `u` | `50` | Minimum float size, as a percentage of the work area (0 disables) |
+
+### Workspaces
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `workspace-rules` | `a(susb)` | `[]` | `(class, workspace, monitor, on-open)`: apps' workspace (from 1) and monitor (`''`, `primary`, `secondary` or a connector). On-open rules place new windows; all rules apply on rebalance and after monitor changes |
+| `workspace-back-and-forth` | `b` | `true` | Pressing the current workspace's key goes back to the previous workspace |
+| `startup-workspace` | `u` | `0` | Workspace (from 1) to land on at login, with the overview hidden; 0 disables |
+| `pop-switch-workspace-1` … `-10` | `as` | `[]` | Switch to a workspace. With several monitors, a workspace whose rule parks its app on a monitor outside the workspaces focuses that app instead, and toggles back |
+| `pop-move-workspace-1` … `-10` | `as` | `[]` | Move the focused window to a workspace |
+| `rebalance-windows` | `as` | `[]` | Re-apply every workspace rule |
+
+### Pointer
+
+The pointer follows focus changes unless they evidently came from the pointer: it is already inside the
+window, a button is held, or it rests on the top bar, the dock or a notification.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `mouse-cursor-follows-active-window` | `b` | `true` | Enable pointer following |
+| `mouse-cursor-focus-location` | `u` | `0` | Where it lands: 0 top-left … 4 center |
+| `mouse-cursor-warp-to-last-position` | `b` | `false` | Return to the last pointer position inside each window instead |
+| `focus-follows-mouse-fix` | `b` | `true` | Focus the window under a resting pointer when sloppy focus misses a slow movement |
+
+The `com.System76.PopShell` D-Bus service also offers `ClearNotifications`.
+
+### Animations
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `animate-tiling` | `b` | `false` | Ease tiled windows into their new place (also in the panel menu; follows GNOME's animation setting) |
+| `animation-duration` | `u` | `150` | Animation length in milliseconds |
+
+### Removed
+
+The launcher (use any launcher you like), window title hiding and other X11-only code, the GTK 3 color
+picker and floating exceptions dialogs (colors and float rules are settings), and support for GNOME
+releases before 49.
+
+### Example
+
+```sh
+P=org.gnome.shell.extensions.pop-shell
+gsettings set $P inactive-hint true
+gsettings set $P hint-color-rgba 'rgb(122,162,247)'
+gsettings set $P hint-color-end-rgba 'rgb(187,154,247)'
+gsettings set $P workspace-rules "[('firefox', 2, '', true), ('^kitty\$', 1, '', false)]"
+gsettings set $P pop-switch-workspace-2 "['<Super>2']"
+gsettings set $P float-rules "[('^org\\.gnome\\.Nautilus\$', '')]"
+```
+
+---
+
 ## Table of Contents
 
+- [About this fork](#about-this-fork): What this fork adds and removes
 - [The Proposal](#the-proposal): Possible upstreaming into GNOME
 - [The Problem](#the-problem): Why we need this in GNOME
 - [Installation](#installation): For those wanting to install this on their distribution
@@ -67,11 +153,11 @@ Use the branch corresponding to your GNOME Shell version (`git checkout branch_n
 - **GNOME 3.36 through 41:** Use the `master_focal` branch.
 - **GNOME 42 through 44:** Use the `master_jammy` branch.
 - **GNOME 45:** Use the `master_mantic` branch.
-- **GNOME 46+:** Use the `master_noble` branch.
+- **GNOME 46+:** Use the `master_noble` branch. In this fork, `master_noble` supports GNOME 49 and 50.
 
 GNU Make and TypeScript are also required to build the project.
 
-Proper functionality of the shell requires modifying GNOME's default keyboard shortcuts. For a local installation, run `make local-install`.
+Proper functionality of the shell requires modifying GNOME's default keyboard shortcuts. For a local installation, run `make local-install`. In this fork it only builds, installs and recompiles the user schema directory; run `make configure` once to apply pop-shell's default keyboard shortcuts and mutter settings. On Wayland, log out and back in to load a new build, or try it with `make nested`.
 
 If you want to uninstall the extension, you may invoke `make uninstall`, and then open the "Keyboard Shortcuts" panel in GNOME Settings to select the "Reset All.." button in the header bar.
 
@@ -145,7 +231,7 @@ Switching focus to the left will calculate from the center of the east side of t
 
 ### Launcher
 
-Pop Shell provides an integrated launcher which interfaces directly with our [pop-launcher](https://github.com/pop-os/launcher) service. JSON IPC is used to communicate between the shell and the launcher in an asynchronous fashion. This functionality was separated from the shell due to performance and maintainability issues. The new launcher is written in Rust and fully async. The launcher has extensive features that would be useful for implementing desktop launchers beyond a shell extension.
+Removed in this fork. Upstream Pop Shell integrates [pop-launcher](https://github.com/pop-os/launcher).
 
 ### Inner and Outer Gaps
 
@@ -153,7 +239,7 @@ Gaps improve the aesthetics of tiled windows and make it easier to grab the edge
 
 ### Hiding Window Title Bars
 
-Windows with server-side decorations may have their title bars completely hidden, resulting in additional screen real estate for your applications, and a visually cleaner environment. This feature can be toggled in the extension's popup menu. Windows can be moved with the mouse by holding `Super` when clicking and dragging a window to another location, or using the keyboard shortcuts native to pop-shell. Windows may be closed by pressing `Super` + `Q`, and maximized with `Super` + `M`.
+Removed in this fork: it relied on X11 window properties, which Wayland-only GNOME does not have.
 
 ---
 
@@ -184,16 +270,14 @@ Disabled by default, this mode manages windows using a tree-based tiling window 
   - See [#customizing the window float list](#customizing-the-floating-window-list)
 
 ### Customizing the Floating Window List
-There is file `$XDG_CONFIG_HOME/pop-shell/config.json` where you can add the following structure:
-```
-{
-  class: "<WM_CLASS String from xprop>",
-  title: "<Optional Window Title>"
-}
-```
-For example, doing `xprop` on GNOME Settings (or GNOME Control Center), the WM_CLASS values are `gnome-control-center` and `Gnome-control-center`. Use the second value (Gnome-control-center), which pop-shell will read. The `title` field is optional.
 
-After applying changes in `config.json`, you can reload the tiling if it doesn't work the first time.
+In this fork, the `float-rules` setting holds `(class, title)` regular expressions of windows that float
+(see [About this fork](#about-this-fork)), checked before pop-shell's built-in rules. To add one from the
+desktop, pick "Add Floating Exception" in the extension's menu and click a window in the overview. Window
+classes can be found with Looking Glass (`Alt` + `F2`, `lg`, Windows tab).
+
+The floating exceptions dialog and the float list in `config.json` are gone; `config.json` now only holds
+the `log_on_focus` and `skiptaskbarhidden` debugging options.
 
 ## Developers
 
@@ -205,7 +289,7 @@ Please install the following as dependencies when developing:
 - Latest `npm` (comes with NodeJS)
 - `npm install typescript@latest`
 
-While working on the shell, you can recompile, reconfigure, reinstall, and restart GNOME Shell with logging with `make debug`. Note that this only works reliably in X11 sessions, since Wayland will exit to the login screen on restarting the shell.
+While working on the shell, `make local-install` rebuilds and installs it, and `make debug` also follows the shell's log. GNOME Shell cannot restart in place on Wayland: log out and back in, or run a nested shell with `make nested`.
 
 [Discussions welcome on Pop Chat](https://chat.pop-os.org/pop-os/channels/development)
 

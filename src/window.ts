@@ -7,6 +7,8 @@ import type { Ext } from './extension.js';
 import type { Rectangle } from './rectangle.js';
 import * as scheduler from './scheduler.js';
 import { Border } from './border.js';
+import { CORNERS_EFFECT, RoundedCornersEffect } from './corners.js';
+import type { RoundedCorners } from './corners.js';
 
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
@@ -44,6 +46,9 @@ export class ShellWindow {
 
     // True while a tiling animation moves a clone of this window
     animating: boolean = false;
+
+    // Corner rounding effect on the window actor, created on first use
+    private corners: RoundedCorners | null = null;
 
     border: null | Border = new Border();
 
@@ -259,12 +264,15 @@ export class ShellWindow {
 
     workspace_id(): number {
         const workspace = this.meta.get_workspace();
-        if (workspace) {
-            return workspace.index();
-        } else {
-            this.meta.change_workspace_by_index(0, false);
-            return 0;
-        }
+        if (workspace) return workspace.index();
+
+        // Windows on every workspace (such as those on a monitor outside the
+        // workspaces) have none: they are on the active one. Pinning them to a
+        // workspace here would make mutter re-stick them and pop-shell retile.
+        if (this.meta.is_on_all_workspaces()) return global.workspace_manager.get_active_workspace_index();
+
+        this.meta.change_workspace_by_index(0, false);
+        return 0;
     }
 
     /** True if the window is on screen in a state where it may carry a border or dim overlay */
@@ -303,6 +311,7 @@ export class ShellWindow {
         }
 
         const styles = this.ext.border_styles;
+        border.set_overlay_radius(this.corners?.enabled ? this.corner_radius() / this.ext.dpi : 0);
         border.set_ring_visible(ring);
         border.set_style(focused ? styles.active : styles.inactive);
         this.update_border_layout();
@@ -312,6 +321,8 @@ export class ShellWindow {
     }
 
     same_workspace() {
+        if (this.meta.is_on_all_workspaces()) return true;
+
         const workspace = this.meta.get_workspace();
         if (workspace) {
             let workspace_id = workspace.index();
@@ -322,6 +333,60 @@ export class ShellWindow {
 
     same_monitor() {
         return this.meta.get_monitor() === global.display.get_current_monitor();
+    }
+
+    /**
+     * Rounds the window's corners to sit concentrically inside its hint.
+     * The effect renders the window offscreen, so it is enabled only while
+     * rounded corners actually show: not for maximized, edge-to-edge or
+     * fullscreen windows (which keeps fullscreen direct scanout working).
+     */
+    refresh_corners() {
+        const actor = this.meta.get_compositor_private();
+        if (!actor || this.destroying) return;
+
+        const settings = this.ext.settings;
+        const radius = this.corner_radius();
+
+        const wanted =
+            settings.round_windows() &&
+            radius > 0 &&
+            !this.meta.minimized &&
+            !this.meta.is_fullscreen() &&
+            !this.is_max_screen() &&
+            !this.is_snap_edge();
+
+        if (!wanted) {
+            if (this.corners?.enabled) this.corners.set_enabled(false);
+            return;
+        }
+
+        if (!this.corners) {
+            this.corners = new RoundedCornersEffect();
+            actor.add_effect_with_name(CORNERS_EFFECT, this.corners);
+        } else if (!this.corners.enabled) {
+            this.corners.set_enabled(true);
+        }
+
+        const buffer = this.meta.get_buffer_rect();
+        const frame = this.meta.get_frame_rect();
+        const relative = { x: frame.x - buffer.x, y: frame.y - buffer.y, width: frame.width, height: frame.height };
+        this.corners.set_geometry(relative, buffer.width, buffer.height, radius);
+    }
+
+    /** Window corner radius in stage pixels: concentric with the hint drawn outside the frame */
+    private corner_radius(): number {
+        const settings = this.ext.settings;
+        const style = this.ext.border_styles.active;
+        const hinted = settings.active_hint() || settings.inactive_hint();
+        return Math.max(0, style.radius - (hinted ? style.width : 0));
+    }
+
+    /** Removes the corner rounding effect from the window actor */
+    remove_corners() {
+        if (!this.corners) return;
+        this.meta.get_compositor_private()?.remove_effect_by_name(CORNERS_EFFECT);
+        this.corners = null;
     }
 
     /** Keeps the border directly above its window (and its stack tabs), so windows covering it cover the border too */
