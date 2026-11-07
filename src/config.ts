@@ -1,22 +1,15 @@
-import GLib from 'gi://GLib';
-import Gio from 'gi://Gio';
-
-export var CONF_FILE: string = GLib.get_user_config_dir() + '/pop-shell/config.json';
-
-export interface FloatRule {
+interface FloatRule {
     class?: string;
     title?: string;
-    disabled?: boolean;
 }
 
-export const DEFAULT_FLOAT_RULES: Array<FloatRule> = [
+const DEFAULT_FLOAT_RULES: Array<FloatRule> = [
     { class: 'Authy Desktop' },
     { class: 'Com.github.amezin.ddterm' },
     { class: 'Com.github.donadigo.eddy' },
     { class: 'Conky' },
     { title: 'Discord Updater' },
     { class: 'Enpass', title: 'Enpass Assistant' },
-    { class: 'Floating Window Exceptions' },
     { class: 'Gjs', title: 'Settings' },
     { class: 'Gnome-initial-setup' },
     { class: 'Gnome-terminal', title: 'Preferences – General' },
@@ -48,15 +41,9 @@ export const DEFAULT_FLOAT_RULES: Array<FloatRule> = [
     { class: 'gjs' },
 ];
 
-export interface FloatRule {
-    class?: string;
-    title?: string;
-}
-
 interface CompiledRule {
     class: RegExp | null;
     title: RegExp | null;
-    disabled: boolean;
 }
 
 function compile(rules: Array<FloatRule>): Array<CompiledRule> {
@@ -66,7 +53,6 @@ function compile(rules: Array<FloatRule>): Array<CompiledRule> {
             compiled.push({
                 class: rule.class ? new RegExp(rule.class, 'i') : null,
                 title: rule.title ? new RegExp(rule.title, 'i') : null,
-                disabled: rule.disabled === true,
             });
         } catch (why) {
             log(`pop-shell: invalid float rule ${JSON.stringify(rule)}: ${why}`);
@@ -75,19 +61,13 @@ function compile(rules: Array<FloatRule>): Array<CompiledRule> {
     return compiled;
 }
 
-/**
- * Float rules (the float-rules setting plus the built-in ones) and the few
- * options still read from ~/.config/pop-shell/config.json.
- */
+/** Float rules: the float-rules setting, then the built-in ones */
 export class Config {
     /** Float rules from the float-rules setting, checked before the built-in ones */
     #float: Array<FloatRule> = [];
 
     /** Compiled float rules, rebuilt when the setting changes */
     #compiled_float: Array<CompiledRule> | null = null;
-
-    /** Logs window details on focus of window */
-    log_on_focus: boolean = false;
 
     /** Sets the rules coming from the float-rules setting */
     set_extra_float(rules: Array<FloatRule>) {
@@ -103,23 +83,9 @@ export class Config {
         for (const rule of this.#compiled_float) {
             if (rule.class && !rule.class.test(wclass)) continue;
             if (rule.title && !rule.title.test(title)) continue;
-            return !rule.disabled;
+            return true;
         }
 
         return false;
-    }
-
-    /** Reads config.json, if there is one; a missing file leaves the defaults */
-    reload() {
-        try {
-            const file = Gio.File.new_for_path(CONF_FILE);
-            if (!file.query_exists(null)) return;
-
-            const [, buffer] = file.load_contents(null);
-            const conf = JSON.parse(new TextDecoder().decode(buffer));
-            this.log_on_focus = conf.log_on_focus === true;
-        } catch (why) {
-            log(`pop-shell: error loading ${CONF_FILE}: ${why}`);
-        }
     }
 }

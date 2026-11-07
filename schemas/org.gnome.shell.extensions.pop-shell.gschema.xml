@@ -123,19 +123,9 @@
             <summary>Switch to workspace 1 (again: back to the previous workspace)</summary>
         </key>
 
-        <key type="as" name="pop-move-workspace-1">
-            <default><![CDATA[[]]]></default>
-            <summary>Move the focused window to workspace 1</summary>
-        </key>
-
         <key type="as" name="pop-switch-workspace-2">
             <default><![CDATA[[]]]></default>
             <summary>Switch to workspace 2 (again: back to the previous workspace)</summary>
-        </key>
-
-        <key type="as" name="pop-move-workspace-2">
-            <default><![CDATA[[]]]></default>
-            <summary>Move the focused window to workspace 2</summary>
         </key>
 
         <key type="as" name="pop-switch-workspace-3">
@@ -143,19 +133,9 @@
             <summary>Switch to workspace 3 (again: back to the previous workspace)</summary>
         </key>
 
-        <key type="as" name="pop-move-workspace-3">
-            <default><![CDATA[[]]]></default>
-            <summary>Move the focused window to workspace 3</summary>
-        </key>
-
         <key type="as" name="pop-switch-workspace-4">
             <default><![CDATA[[]]]></default>
             <summary>Switch to workspace 4 (again: back to the previous workspace)</summary>
-        </key>
-
-        <key type="as" name="pop-move-workspace-4">
-            <default><![CDATA[[]]]></default>
-            <summary>Move the focused window to workspace 4</summary>
         </key>
 
         <key type="as" name="pop-switch-workspace-5">
@@ -163,19 +143,9 @@
             <summary>Switch to workspace 5 (again: back to the previous workspace)</summary>
         </key>
 
-        <key type="as" name="pop-move-workspace-5">
-            <default><![CDATA[[]]]></default>
-            <summary>Move the focused window to workspace 5</summary>
-        </key>
-
         <key type="as" name="pop-switch-workspace-6">
             <default><![CDATA[[]]]></default>
             <summary>Switch to workspace 6 (again: back to the previous workspace)</summary>
-        </key>
-
-        <key type="as" name="pop-move-workspace-6">
-            <default><![CDATA[[]]]></default>
-            <summary>Move the focused window to workspace 6</summary>
         </key>
 
         <key type="as" name="pop-switch-workspace-7">
@@ -183,19 +153,9 @@
             <summary>Switch to workspace 7 (again: back to the previous workspace)</summary>
         </key>
 
-        <key type="as" name="pop-move-workspace-7">
-            <default><![CDATA[[]]]></default>
-            <summary>Move the focused window to workspace 7</summary>
-        </key>
-
         <key type="as" name="pop-switch-workspace-8">
             <default><![CDATA[[]]]></default>
             <summary>Switch to workspace 8 (again: back to the previous workspace)</summary>
-        </key>
-
-        <key type="as" name="pop-move-workspace-8">
-            <default><![CDATA[[]]]></default>
-            <summary>Move the focused window to workspace 8</summary>
         </key>
 
         <key type="as" name="pop-switch-workspace-9">
@@ -203,19 +163,9 @@
             <summary>Switch to workspace 9 (again: back to the previous workspace)</summary>
         </key>
 
-        <key type="as" name="pop-move-workspace-9">
-            <default><![CDATA[[]]]></default>
-            <summary>Move the focused window to workspace 9</summary>
-        </key>
-
         <key type="as" name="pop-switch-workspace-10">
             <default><![CDATA[[]]]></default>
             <summary>Switch to workspace 10 (again: back to the previous workspace)</summary>
-        </key>
-
-        <key type="as" name="pop-move-workspace-10">
-            <default><![CDATA[[]]]></default>
-            <summary>Move the focused window to workspace 10</summary>
         </key>
 
         <key type="as" name="rebalance-windows">
@@ -266,19 +216,9 @@
 
         <!-- Tiling Options -->
 
-        <key type="b" name="smart-gaps">
-            <default>false</default>
-            <summary>Hide the outer gap when a tree contains only one window</summary>
-        </key>
-
         <key type="b" name="tile-by-default">
             <default>false</default>
             <summary>Tile launched windows by default</summary>
-        </key>
-
-        <key type="u" name="max-window-width">
-            <default>0</default>
-            <summary>Maximum width of tiled windows, in pixels (0 to disable)</summary>
         </key>
 
         <!-- Focus Shifting -->

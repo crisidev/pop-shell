@@ -1,31 +1,7 @@
-import * as result from './result.js';
-import * as error from './error.js';
-
-import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
-const { Ok, Err } = result;
-const { Error } = error;
-
-export function read_to_string(path: string): result.Result<string, error.Error> {
-    const file = Gio.File.new_for_path(path);
-    try {
-        const [ok, contents] = file.load_contents(null);
-        if (ok) {
-            return Ok(new TextDecoder().decode(contents));
-        } else {
-            return Err(new Error(`failed to load contents of ${path}`));
-        }
-    } catch (e) {
-        return Err(new Error(String(e)).context(`failed to load contents of ${path}`));
-    }
-}
 
 export function source_remove(id: SignalID): boolean {
     return GLib.source_remove(id) as any;
-}
-
-export function exists(path: string): boolean {
-    return Gio.File.new_for_path(path).query_exists(null);
 }
 
 /**
@@ -65,8 +41,6 @@ export function is_dark(color: string): boolean {
     let L = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
     return L <= 0.179;
 }
-
-/** Utility function for running a process in the background and fetching its standard output as a string. */
 
 export function map_eq<K, V>(map1: Map<K, V>, map2: Map<K, V>) {
     if (map1.size !== map2.size) {

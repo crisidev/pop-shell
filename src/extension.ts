@@ -61,25 +61,13 @@ const { cursor_rect, is_keyboard_op, is_resize_op, is_move_op } = Lib;
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 const {
     layoutManager,
-    loadTheme,
     overview,
-    setThemeStylesheet,
     screenShield,
     sessionMode,
     windowAttentionHandler,
 } = Main;
 import { ScreenShield } from 'resource:///org/gnome/shell/ui/screenShield.js';
 import * as Tags from './tags.js';
-import { get_current_path } from './paths.js';
-
-const STYLESHEET_PATHS = ['light', 'dark', 'highcontrast'].map(stylesheet_path);
-const STYLESHEETS = STYLESHEET_PATHS.map((path) => Gio.File.new_for_path(path));
-
-enum Style {
-    Light,
-    Dark,
-    HighContrast,
-}
 
 interface Display {
     area: Rectangle;
@@ -120,7 +108,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
 
     /** The currently-loaded theme variant */
-    current_style: Style = Style.Dark;
 
     /** Set when the display configuration has been triggered for execution */
     displays_updating: SignalID | null = null;
@@ -247,34 +234,7 @@ export class Ext extends Ecs.System<ExtEvent> {
         super(new Executor.GLibExecutor());
 
         this.load_settings();
-        this.reload_theme();
-
-        this.register_fn(() => load_theme(this.current_style));
-
-        this.conf.reload();
         this.load_float_rules();
-
-        if (this.settings.int) {
-            this.settings.int.connect('changed::gtk-theme', () => {
-                this.register(Events.global(GlobalEvent.GtkThemeChanged));
-            });
-
-            this.settings.int.connect('changed::color-scheme', () => {
-                this.register(Events.global(GlobalEvent.GtkThemeChanged));
-            });
-        }
-
-        if (this.settings.a11y) {
-            this.settings.a11y.connect('changed::high-contrast', () => {
-                this.register(Events.global(GlobalEvent.GtkThemeChanged));
-            });
-        }
-
-        if (this.settings.shell) {
-            this.settings.shell.connect('changed::name', () => {
-                this.register(Events.global(GlobalEvent.GtkShellChanged));
-            });
-        }
 
         this.dbus.ClearNotifications = () => {
             for (const source of Main.messageTray.getSources()) {
@@ -375,14 +335,6 @@ export class Ext extends Ecs.System<ExtEvent> {
             /** Stateless global events */
             case 4:
                 switch (event.event) {
-                    case GlobalEvent.GtkShellChanged:
-                        this.on_gtk_shell_changed();
-                        break;
-
-                    case GlobalEvent.GtkThemeChanged:
-                        this.on_gtk_theme_change();
-                        break;
-
                     case GlobalEvent.MonitorsChanged:
                         this.update_display_configuration(false);
                         break;
@@ -721,22 +673,6 @@ export class Ext extends Ecs.System<ExtEvent> {
             }
         }
 
-        if (this.conf.log_on_focus) {
-            let msg =
-                `focused Window(${win.entity}) {\n` +
-                `  class: "${win.meta.get_wm_class()}",\n` +
-                `  cmdline: ${win.cmdline()},\n` +
-                `  monitor: ${win.meta.get_monitor()},\n` +
-                `  name: ${win.name(this)},\n` +
-                `  rect: ${win.rect().fmt()},\n` +
-                `  workspace: ${win.workspace_id()},\n`;
-
-            if (this.auto_tiler) {
-                msg += `  fork: (${this.auto_tiler.attached.get(win.entity)}),\n`;
-            }
-
-            log.debug(msg + '}');
-        }
     }
 
     on_tile_attach(entity: Entity, window: Entity) {
@@ -1239,24 +1175,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
     }
 
-    on_gtk_shell_changed() {
-        this.reload_theme();
-        load_theme(this.current_style);
-    }
-
-    on_gtk_theme_change() {
-        this.reload_theme();
-        load_theme(this.current_style);
-    }
-
-    reload_theme() {
-        this.current_style = this.settings.is_dark()
-            ? Style.Dark
-            : this.settings.is_high_contrast()
-                ? Style.HighContrast
-                : Style.Light;
-    }
-
     /** Handle window maximization notifications */
     on_maximize(win: Window.ShellWindow) {
         if (win.is_maximized()) {
@@ -1343,18 +1261,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     on_overview_shown() {
         this.exit_modes();
         this.unset_grab_op();
-    }
-
-    on_smart_gap() {
-        if (this.auto_tiler) {
-            const smart_gaps = this.settings.smart_gaps();
-            for (const [entity, [mon]] of this.auto_tiler.forest.toplevel.values()) {
-                const node = this.auto_tiler.forest.forks.get(entity);
-                if (node?.right === null) {
-                    this.auto_tiler.update_toplevel(this, node, mon, smart_gaps);
-                }
-            }
-        }
     }
 
     on_window_create(window: Meta.Window, actor: Clutter.Actor) {
@@ -1518,9 +1424,8 @@ export class Ext extends Ecs.System<ExtEvent> {
             const display = this.monitor_work_area(f.monitor);
             if (!display) continue;
 
-            f.smart_gapped = false;
             f.set_area(new Rect.Rectangle([display.x, display.y, display.width, display.height]));
-            this.auto_tiler.update_toplevel(this, f, f.monitor, this.settings.smart_gaps());
+            this.auto_tiler.update_toplevel(this, f, f.monitor);
         }
     }
 
@@ -1625,10 +1530,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                     break;
                 case 'gap-outer':
                     this.on_gap_outer();
-                    break;
-                case 'smart-gaps':
-                    this.on_smart_gap();
-                    this.schedule_border_update();
                     break;
             }
         });
@@ -2045,9 +1946,8 @@ export class Ext extends Ecs.System<ExtEvent> {
                 if (display) {
                     const area = new Rect.Rectangle([display.x, display.y, display.width, display.height]);
 
-                    f.smart_gapped = false;
                     f.set_area(area.clone());
-                    this.auto_tiler.update_toplevel(this, f, f.monitor, this.settings.smart_gaps());
+                    this.auto_tiler.update_toplevel(this, f, f.monitor);
                 }
             }
         };
@@ -2466,47 +2366,6 @@ function enable_window_attention_handler() {
 
 function disable_window_attention_handler() {
     if (handler) (global.display as any).disconnectObject(handler);
-}
-
-function stylesheet_path(name: string) {
-    return get_current_path() + '/' + name + '.css';
-}
-
-// Supplements the loaded theme with the extension's theme.
-function load_theme(style: Style): string | any {
-    let pop_stylesheet = Number(style);
-    try {
-        const theme_context = St.ThemeContext.get_for_stage(global.stage);
-
-        const existing_theme: null | any = theme_context.get_theme();
-
-        const pop_stylesheet_path = STYLESHEET_PATHS[pop_stylesheet];
-
-        if (existing_theme) {
-            /* Must unload stylesheets, or else the previously loaded
-             * stylesheets will persist when loadTheme() is called
-             * (found in source code of imports.ui.main).
-             */
-            for (const s of STYLESHEETS) {
-                existing_theme.unload_stylesheet(s);
-            }
-
-            // Merge theme update with pop shell styling
-            existing_theme.load_stylesheet(STYLESHEETS[pop_stylesheet]);
-
-            // Perform theme update
-            theme_context.set_theme(existing_theme);
-        } else {
-            // User does not have a theme loaded, so use pop styling + default
-            setThemeStylesheet(pop_stylesheet_path);
-            loadTheme();
-        }
-
-        return pop_stylesheet_path;
-    } catch (e) {
-        log.error('failed to load stylesheet: ' + e);
-        return null;
-    }
 }
 
 function* iter_workspaces(manager: any): IterableIterator<[number, any]> {

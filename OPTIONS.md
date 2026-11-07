@@ -78,8 +78,6 @@ measured between borders, so `gap-inner` and `gap-outer` are the space you see.
 | `tile-by-default` | `b` | `false` | Turn auto-tiling on at login (toggle it with `toggle-tiling`) |
 | `gap-inner` | `u` | `2` | Gap between tiled windows |
 | `gap-outer` | `u` | `2` | Gap between tiled windows and the screen edges |
-| `smart-gaps` | `b` | `false` | No outer gap when a monitor's workspace holds a single tiled window |
-| `max-window-width` | `u` | `0` | Maximum width of tiled windows, centered in their tile. 0 disables it |
 | `animate-tiling` **fork** | `b` | `false` | Ease tiled windows into their new place. Follows GNOME's animation setting |
 | `animation-duration` **fork** | `u` | `150` | Length of tiling animations, 50–1000 milliseconds |
 
@@ -87,7 +85,7 @@ measured between borders, so `gap-inner` and `gap-outer` are the space you see.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `float-rules` **fork** | `a(ss)` | `[]` | Windows that float instead of tiling, as `(class, title)` regular expressions, case-insensitive, matched against the WM class and the title; `''` matches anything. Checked before the rules in `~/.config/pop-shell/config.json` and the built-in ones. Find a window's class with Looking Glass (`Alt`+`F2`, `lg`, Windows) |
+| `float-rules` **fork** | `a(ss)` | `[]` | Windows that float instead of tiling, as `(class, title)` regular expressions, case-insensitive, matched against the WM class and the title; `''` matches anything. Checked before the built-in ones. Find a window's class with Looking Glass (`Alt`+`F2`, `lg`, Windows) |
 | `float-above` **fork** | `b` | `true` | Floating windows stay above tiles. With sloppy focus, a float keeps focus when only the pointer moves onto a tile. Clicking another window sends floats back to normal stacking until one is focused again; keyboard focus changes move focus but leave floats on top |
 | `float-center` **fork** | `b` | `true` | New floating windows, and windows toggled to floating, open centered on their monitor |
 | `float-min-size` **fork** | `u` | `50` | Minimum size of floating windows, 0–100 % of the work area. 0 disables it |
@@ -100,7 +98,6 @@ measured between borders, so `gap-inner` and `gap-outer` are the space you see.
 | `workspace-back-and-forth` **fork** | `b` | `true` | Pressing the key of the current workspace goes back to the previous one |
 | `startup-workspace` **fork** | `u` | `0` | Workspace, from 1, to land on at login, with the overview hidden. 0 disables it |
 | `pop-switch-workspace-1` … `-10` **fork** | `as` | `[]` | Switch to a workspace, landing on its last focused window |
-| `pop-move-workspace-1` … `-10` **fork** | `as` | `[]` | Move the focused window to a workspace |
 | `rebalance-windows` **fork** | `as` | `[]` | Move every window to where its workspace rule puts it |
 
 Workspace rules, in detail:
@@ -148,9 +145,9 @@ Global:
 | `tile-orientation` | `<Super>o` | Toggle the orientation of the focused window's split |
 | `tile-move-left-global`, `-down`, `-up`, `-right` | `[]` | Move the focused tile in that direction, without entering management mode |
 
-The workspace shortcuts (`pop-switch-workspace-N`, `pop-move-workspace-N`, `rebalance-windows`) are in
-[Workspaces and monitors](#workspaces-and-monitors). Moving a window to the next workspace or monitor
-uses GNOME's own shortcuts (`move-to-workspace-*`, `move-to-monitor-*`).
+The workspace shortcuts (`pop-switch-workspace-N`, `rebalance-windows`) are in
+[Workspaces and monitors](#workspaces-and-monitors). Moving a window to a workspace or monitor uses
+GNOME's own shortcuts (`move-to-workspace-*`, `move-to-monitor-*`).
 
 Window management mode resizes the focused tiled window; it doesn't open on floating windows, which you
 move and resize with the mouse. In it:
@@ -169,5 +166,3 @@ move and resize with the mouse. In it:
 | `log-level` | `u` | `0` | Logging to the shell's journal: 0 off, 1 errors, 2 warnings, 3 info, 4 debug |
 
 Read the logs with `journalctl -o cat -f "$(which gnome-shell)" | grep pop-shell`.
-
-`~/.config/pop-shell/config.json` can set `log_on_focus` to log every focused window.

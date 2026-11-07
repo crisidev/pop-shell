@@ -18,7 +18,7 @@ $(info UUID is "$(UUID)")
 
 .PHONY: all clean install zip-file local-install user-schemas restart-shell nested
 
-sources = src/*.ts *.css
+sources = src/*.ts
 
 all: depcheck compile
 

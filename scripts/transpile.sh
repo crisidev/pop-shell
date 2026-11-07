@@ -12,5 +12,5 @@ tsc
 wait
 
 # Assemble the extension in _build/
-cp -r metadata.json schemas *.css _build
+cp -r metadata.json schemas _build
 cp target/*.js _build

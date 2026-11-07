@@ -2,7 +2,6 @@ import GLib from 'gi://GLib';
 import * as log from './log.js';
 import * as Rect from './rectangle.js';
 import * as Tags from './tags.js';
-import * as utils from './utils.js';
 import type { Entity } from './ecs.js';
 import type { TilePlace } from './forest.js';
 import type { Ext } from './extension.js';
@@ -33,8 +32,6 @@ export class ShellWindow {
     // Awaiting reassignment after a display update
     reassignment: boolean = false;
 
-    // True if this window is currently smart-gapped
-    smart_gapped: boolean = false;
 
     // True if pop-shell made this window always-on-top because it floats
     made_above: boolean = false;
@@ -128,33 +125,15 @@ export class ShellWindow {
             );
     }
 
-    cmdline(): string | null {
-        let pid = this.meta.get_pid(),
-            out = null;
-        if (-1 === pid) return out;
-
-        const path = '/proc/' + pid + '/cmdline';
-        if (!utils.exists(path)) return out;
-
-        const result = utils.read_to_string(path);
-        if (result.kind == 1) {
-            out = result.value.trim();
-        } else {
-            log.error(`failed to fetch cmdline: ${result.value.format()}`);
-        }
-
-        return out;
-    }
-
     is_maximized(): boolean {
         return this.meta.maximized_horizontally || this.meta.maximized_vertically;
     }
 
     /**
-     * Window is maximized, 0 gapped or smart gapped
+     * Window is maximized or 0 gapped
      */
     is_max_screen(): boolean {
-        return this.is_maximized() || this.ext.settings.gap_inner() === 0 || this.smart_gapped;
+        return this.is_maximized() || this.ext.settings.gap_inner() === 0;
     }
 
     is_single_max_screen(): boolean {
@@ -162,7 +141,7 @@ export class ShellWindow {
 
         if (display) {
             let monitor_count = display.get_n_monitors();
-            return (this.is_maximized() || this.smart_gapped) && monitor_count == 1;
+            return this.is_maximized() && monitor_count == 1;
         }
 
         return false;
@@ -221,12 +200,6 @@ export class ShellWindow {
     move(ext: Ext, rect: Rectangular, on_complete?: () => void) {
         if (!this.same_workspace() && this.is_maximized()) {
             return;
-        }
-
-        const max_width = ext.settings.max_window_width();
-        if (max_width > 0 && rect.width > max_width) {
-            rect.x += (rect.width - max_width) / 2;
-            rect.width = max_width;
         }
 
         const clone = Rect.Rectangle.from_meta(rect);

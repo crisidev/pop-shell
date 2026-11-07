@@ -1,9 +1,0 @@
-/* Window hints are drawn from edge and corner pieces whose colors and
-   sizes come from the hint settings, see src/border.ts */
-.pop-shell-active-hint {
-    background-color: transparent;
-}
-
-.pop-shell-overlay {
-    background-color: rgba(53, 132, 228, 0.3);
-}

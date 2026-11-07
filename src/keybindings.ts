@@ -20,7 +20,6 @@ export class Keybindings {
 
         for (let i = 0; i < WORKSPACE_KEYS; i += 1) {
             (this.global as any)[`pop-switch-workspace-${i + 1}`] = () => ext.workspace_rules.switch_to(i);
-            (this.global as any)[`pop-move-workspace-${i + 1}`] = () => ext.workspace_rules.move_to(i);
         }
 
         this.window_focus = {

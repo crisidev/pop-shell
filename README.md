@@ -25,7 +25,7 @@ home-manager. Every option is documented in **[OPTIONS.md](OPTIONS.md)**.
 - **Floating windows**: float rules as a setting (regular expressions on class and title), floats that
   stay above tiles and keep focus under sloppy focus, open centered, and have a minimum size.
 - **Workspaces**: rules that send apps to a workspace and monitor (primary, secondary or a connector),
-  on open or on demand; per-workspace switch and move shortcuts with back-and-forth; a startup workspace;
+  on open or on demand; per-workspace switch shortcuts with back-and-forth; a startup workspace;
   and, with several monitors, workspace keys that summon an app parked on another monitor.
 - **Pointer**: the pointer follows keyboard focus, to a chosen spot or to where it last was in that
   window, without fighting sloppy focus; slow pointer movements that GNOME's sloppy focus misses still
@@ -49,6 +49,10 @@ home-manager. Every option is documented in **[OPTIONS.md](OPTIONS.md)**.
   inside window management mode, which now only resizes tiles. Tiles move with
   `tile-move-*-global`.
 - Pop Shell's move-to-monitor and move-to-workspace up/down shortcuts: GNOME's own do the same.
+- `smart-gaps` and `max-window-width`.
+- `~/.config/pop-shell/config.json`: float rules are the `float-rules` setting.
+- Light, dark and high contrast stylesheets, and the theme watching that switched them: hints take
+  their colors from the settings.
 - Showing windows that skip the taskbar (minimized to tray) in the overview and Alt+Tab.
 - Stacks (windows tabbed together in one tile), with `toggle-stacking`, `toggle-stacking-global` and
   `stacking-with-mouse`: dropping a window onto another always splits it.
@@ -92,7 +96,7 @@ See [OPTIONS.md](OPTIONS.md) for every key, home-manager examples and the keyboa
   `Return` or `Escape` leaves it. Bind `tile-move-*-global` to move tiles around.
 - `Super` + `y`: toggle auto-tiling. `Super` + `g`: float or tile a window. `Super` + `o`: toggle a
   split's orientation.
-- `pop-switch-workspace-N` and `pop-move-workspace-N` switch workspace and move windows to one.
+- `pop-switch-workspace-N` switches workspace; GNOME's `move-to-workspace-N` moves windows to one.
 
 ## Develop
 

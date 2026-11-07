@@ -7,7 +7,7 @@ import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-/** How many workspaces have pop-switch-workspace/pop-move-workspace keybindings */
+/** How many workspaces have pop-switch-workspace keybindings */
 export const WORKSPACE_KEYS = 10;
 
 /** How long to wait for the startup overview before giving up on hiding it */
@@ -154,13 +154,6 @@ export class Workspaces {
         } else {
             workspace.activate(global.get_current_time());
         }
-    }
-
-    /** Handles a `pop-move-workspace-N` keybinding (`index` is 0-based) */
-    move_to(index: number) {
-        const win = this.ext.focus_window();
-        if (!win || index >= global.workspace_manager.get_n_workspaces()) return;
-        win.meta.change_workspace_by_index(index, false);
     }
 
     /**

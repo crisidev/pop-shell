@@ -2,8 +2,6 @@ import Gio from 'gi://Gio';
 import Gdk from 'gi://Gdk';
 import { get_current_path } from './paths.js';
 
-const DARK = ['dark', 'adapta', 'plata', 'dracula'];
-
 interface Settings extends GObject.Object {
     get_boolean(key: string): boolean;
     set_boolean(key: string, value: boolean): void;
@@ -65,14 +63,12 @@ const WORKSPACE_BACK_AND_FORTH = 'workspace-back-and-forth';
 const STARTUP_WORKSPACE = 'startup-workspace';
 const GAP_INNER = 'gap-inner';
 const GAP_OUTER = 'gap-outer';
-const SMART_GAPS = 'smart-gaps';
 const TILE_BY_DEFAULT = 'tile-by-default';
 const HINT_COLOR_RGBA = 'hint-color-rgba';
 const HINT_COLOR_END_RGBA = 'hint-color-end-rgba';
 const DEFAULT_RGBA_COLOR = 'rgba(251, 184, 108, 1)'; //pop-orange
 const MOUSE_CURSOR_FOLLOWS_ACTIVE_WINDOW = 'mouse-cursor-follows-active-window';
 const MOUSE_CURSOR_FOCUS_LOCATION = 'mouse-cursor-focus-location';
-const MAX_WINDOW_WIDTH = 'max-window-width';
 const MOUSE_CURSOR_WARP_TO_LAST_POSITION = 'mouse-cursor-warp-to-last-position';
 const ANIMATE_TILING = 'animate-tiling';
 const ANIMATION_DURATION = 'animation-duration';
@@ -85,9 +81,7 @@ function valid_color_or(rgba: string, fallback: string): string {
 export class ExtensionSettings {
     ext: Settings = settings_new_schema('org.gnome.shell.extensions.pop-shell');
     int: Settings | null = settings_new_id('org.gnome.desktop.interface');
-    a11y: Settings | null = settings_new_id('org.gnome.desktop.a11y.interface');
     mutter: Settings | null = settings_new_id('org.gnome.mutter');
-    shell: Settings | null = settings_new_id('org.gnome.shell.extensions.user-theme');
 
     // Getters
 
@@ -199,25 +193,6 @@ export class ExtensionSettings {
         return valid_color_or(this.ext.get_string(HINT_COLOR_END_RGBA), this.hint_color_rgba());
     }
 
-    theme(): string {
-        return this.shell ? this.shell.get_string('name') : this.int ? this.int.get_string('gtk-theme') : 'Adwaita';
-    }
-
-    /** Dark if the desktop prefers a dark style, or the theme name says so */
-    is_dark(): boolean {
-        if (this.int?.get_string('color-scheme') === 'prefer-dark') return true;
-        const theme = this.theme().toLowerCase();
-        return DARK.some((dark) => theme.includes(dark));
-    }
-
-    is_high_contrast(): boolean {
-        return this.a11y?.get_boolean('high-contrast') || this.theme().toLowerCase() === 'highcontrast';
-    }
-
-    smart_gaps(): boolean {
-        return this.ext.get_boolean(SMART_GAPS);
-    }
-
     tile_by_default(): boolean {
         return this.ext.get_boolean(TILE_BY_DEFAULT);
     }
@@ -250,9 +225,6 @@ export class ExtensionSettings {
         return this.ext.get_boolean(FOCUS_FOLLOWS_MOUSE_FIX);
     }
 
-    max_window_width(): number {
-        return this.ext.get_uint(MAX_WINDOW_WIDTH);
-    }
 
     // Setters
 
