@@ -1,7 +1,8 @@
+
+
 # Pop Shell (crisidev fork)
 
-<!-- Demo video: drag the recording into GitHub's editor for this file and replace this comment with the
-     https://github.com/user-attachments/assets/… link it creates, on a line of its own. -->
+https://github.com/user-attachments/assets/819550b1-52cb-486e-af02-d30908601296
 
 A fork of [Pop Shell](https://github.com/pop-os/shell), System76's GNOME Shell extension that adds
 i3-style tiling to GNOME: keyboard-driven focus and movement, an auto-tiling tree with stacks, and
