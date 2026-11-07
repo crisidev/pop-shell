@@ -24,7 +24,6 @@ import { BorderStyle, GlowStyle } from './border.js';
 import { Workspaces } from './workspaces.js';
 import { Pointer } from './pointer.js';
 import { TileAnimator } from './animation.js';
-import { WindowEffects } from './window_effects.js';
 import { PanelHint } from './panel_hint.js';
 import { NotificationDestroyedReason } from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as scheduler from './scheduler.js';
@@ -159,9 +158,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     /** Eases tiled windows into place */
     animator: TileAnimator = new TileAnimator(this);
-
-    /** Window open and close animations */
-    effects: WindowEffects = new WindowEffects(this);
 
     /** Pointer follows focus, and the slow-mouse focus fix */
     pointer: Pointer = new Pointer(this);
@@ -2257,7 +2253,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
 
         this.connect(display, 'window_created', (_, window: Meta.Window) => {
-            this.effects.on_created(window);
             this.register({ tag: 3, window });
         });
 
@@ -2970,7 +2965,6 @@ export default class PopShellExtension extends Extension {
         ext.injections_add();
         ext.signals_attach();
         ext.pointer.enable();
-        ext.effects.enable();
         ext.panel_hint.enable();
         ext.workspace_rules.startup();
 
@@ -3000,7 +2994,6 @@ export default class PopShellExtension extends Extension {
             ext.signals_remove();
             ext.exit_modes();
             ext.animator.finish_all();
-            ext.effects.disable();
             ext.panel_hint.disable();
             ext.destroy_all_borders();
             ext.release_float_above();
