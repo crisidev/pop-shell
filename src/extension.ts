@@ -22,7 +22,7 @@ import * as stack from './stack.js';
 import * as add_exception from './dialog_add_exception.js';
 import * as exec from './executor.js';
 import * as dbus_service from './dbus_service.js';
-import { BorderStyle } from './border.js';
+import { BorderStyle, GlowStyle } from './border.js';
 import { Workspaces } from './workspaces.js';
 import { Pointer } from './pointer.js';
 import { TileAnimator } from './animation.js';
@@ -37,6 +37,19 @@ import { Rectangle } from './rectangle.js';
 import type { Indicator } from './panel_settings.js';
 
 import { Fork } from './fork.js';
+
+/** Glow blur, in logical pixels, of focus flashes when active-hint-glow is 0 */
+const DEFAULT_GLOW = 12;
+
+/** Window border styles, rebuilt on settings and scale changes */
+export interface BorderStyles {
+    active: BorderStyle;
+    inactive: BorderStyle;
+    /** Steady glow of the focused window, or null when active-hint-glow is 0 */
+    glow: GlowStyle | null;
+    /** Glow of focus flashes: the steady glow, or a default one when that is off */
+    flash: GlowStyle;
+}
 
 const display = global.display;
 const wim = global.window_manager;
@@ -160,7 +173,7 @@ export class Ext extends Ecs.System<ExtEvent> {
     workspace_rules: Workspaces = new Workspaces(this);
 
     /** Precomputed border styles for focused and unfocused windows */
-    border_styles: { active: BorderStyle; inactive: BorderStyle } = this.create_border_styles();
+    border_styles: BorderStyles = this.create_border_styles();
 
     /** Cached inline styles for stack tabs, following the hint colors */
     tab_styles: { active: string; inactive: string; urgent: string } = this.create_tab_styles();
@@ -1100,14 +1113,20 @@ export class Ext extends Ecs.System<ExtEvent> {
         }
     }
 
-    create_border_styles(): { active: BorderStyle; inactive: BorderStyle } {
+    create_border_styles(): BorderStyles {
         const s = this.settings;
         const scaling = s.text_scaling_factor();
         const width = Math.max(1, Math.round(s.active_hint_border_width() * scaling));
         const radius = Math.round(s.active_hint_border_radius() * scaling);
+        const start = s.hint_color_rgba();
+        const end = s.hint_color_end_rgba();
+
+        const glow_px = s.active_hint_glow() * scaling;
+        const default_px = DEFAULT_GLOW * scaling;
+        const glow = glow_px > 0 ? new GlowStyle(start, end, radius, glow_px, this.dpi) : null;
 
         return {
-            active: new BorderStyle(s.hint_color_rgba(), s.hint_color_end_rgba(), width, radius, this.dpi),
+            active: new BorderStyle(start, end, width, radius, this.dpi),
             inactive: new BorderStyle(
                 s.inactive_hint_color_rgba(),
                 s.inactive_hint_color_end_rgba(),
@@ -1115,6 +1134,8 @@ export class Ext extends Ecs.System<ExtEvent> {
                 radius,
                 this.dpi,
             ),
+            glow,
+            flash: glow ?? new GlowStyle(start, end, radius, default_px, this.dpi),
         };
     }
 
@@ -2138,6 +2159,8 @@ export class Ext extends Ecs.System<ExtEvent> {
                 case 'hint-color-end-rgba':
                 case 'inactive-hint-color-rgba':
                 case 'inactive-hint-color-end-rgba':
+                case 'active-hint-glow':
+                case 'active-hint-glow-opacity':
                     this.update_border_styles();
                     break;
                 case 'gap-inner':
@@ -2254,6 +2277,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                         }
 
                         if (shell_window) {
+                            if (by_keyboard && !by_click && meta_window !== previous) shell_window.request_flash();
                             this.pointer.on_focus_changed(meta_window, by_click);
                             this.on_float_focus(shell_window, by_click);
 

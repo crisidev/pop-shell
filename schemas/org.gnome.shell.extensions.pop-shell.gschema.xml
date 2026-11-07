@@ -50,6 +50,24 @@
             <summary>Opacity of the black overlay dimming unfocused windows (0 disables dimming)</summary>
         </key>
 
+        <key type="u" name="active-hint-glow">
+            <default>0</default>
+            <range min="0" max="64"/>
+            <summary>Blur radius in pixels of a soft glow around the focused window, in the hint colors (0 disables it)</summary>
+        </key>
+
+        <key type="d" name="active-hint-glow-opacity">
+            <default>0.6</default>
+            <range min="0.0" max="1.0"/>
+            <summary>Opacity of the focused window's glow</summary>
+        </key>
+
+        <key type="u" name="focus-flash">
+            <default>0</default>
+            <range min="0" max="2000"/>
+            <summary>When focus moves by keyboard, flash the newly focused window's glow and fade it over this many milliseconds (0 disables it)</summary>
+        </key>
+
         <key type="a(ss)" name="float-rules">
             <default>[]</default>
             <summary>Windows that float instead of tiling</summary>

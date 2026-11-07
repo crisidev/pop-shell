@@ -124,7 +124,11 @@ declare module 'gi://GLib' {
         timeout_add(priority: number, ms: number, callback: () => boolean): number;
 
         get_user_config_dir(): string;
+        get_user_runtime_dir(): string;
         file_get_contents(filename: string): string;
+        file_test(filename: string, test: number): boolean;
+        mkdir_with_parents(path: string, mode: number): number;
+        FileTest: { EXISTS: number };
     }
     let gLib: GLib;
     export default gLib;
@@ -212,6 +216,7 @@ declare namespace Clutter {
         get_child_at_index(nth: number): Clutter.Actor | null;
         get_n_children(): number;
         get_next_sibling(): Clutter.Actor | null;
+        get_previous_sibling(): Clutter.Actor | null;
         add_effect_with_name(name: string, effect: any): void;
         remove_effect_by_name(name: string): void;
         insert_child_above(child: Actor, sibling: Actor | null): void;
@@ -445,4 +450,9 @@ declare namespace St {
     interface Label extends Widget {
         text: string;
     }
+}
+
+declare module 'cairo' {
+    const Cairo: any;
+    export default Cairo;
 }

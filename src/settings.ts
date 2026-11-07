@@ -144,6 +144,18 @@ export class ExtensionSettings {
         return this.ext.get_double(INACTIVE_DIM);
     }
 
+    active_hint_glow(): number {
+        return this.ext.get_uint('active-hint-glow');
+    }
+
+    active_hint_glow_opacity(): number {
+        return this.ext.get_double('active-hint-glow-opacity');
+    }
+
+    focus_flash(): number {
+        return this.ext.get_uint('focus-flash');
+    }
+
     /** Multiplier applied to border sizes, following the desktop's text scaling */
     text_scaling_factor(): number {
         return this.int ? this.int.get_double('text-scaling-factor') : 1;

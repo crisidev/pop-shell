@@ -20,7 +20,8 @@ whole setup can be declared in dconf (for example from home-manager).
 ### Window hints
 
 Borders are drawn from plain St actors (four gradient edges, four rounded corners): no shaders or
-offscreen buffers, and no work per frame.
+offscreen buffers, and no work per frame. The glow is a small 9-slice image, drawn once per color and
+size, that St stretches around the window, hollow so translucent windows aren't tinted.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -29,6 +30,9 @@ offscreen buffers, and no work per frame.
 | `inactive-hint` | `b` | `false` | Also draw a border around unfocused windows |
 | `inactive-hint-color-rgba`, `inactive-hint-color-end-rgba` | `s` | | Gradient of the unfocused border |
 | `inactive-dim` | `d` | `0.0` | Opacity of a black overlay over unfocused windows (0 disables) |
+| `active-hint-glow` | `u` | `0` | Radius in pixels of a soft glow in the hint colors around the focused window (0 disables) |
+| `active-hint-glow-opacity` | `d` | `0.6` | Opacity of that glow |
+| `focus-flash` | `u` | `0` | When keyboard focus lands on a window, flash its glow and fade it back over this many milliseconds (0 disables) |
 | `panel-hint` | `b` | `false` | Draw the active hint around the top bar while the theme's bar border is transparent |
 
 Sizes follow `text-scaling-factor`. Gaps are measured between borders, so `gap-inner` and `gap-outer`

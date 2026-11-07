@@ -1,6 +1,9 @@
 import Clutter from 'gi://Clutter';
 import Gdk from 'gi://Gdk';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import St from 'gi://St';
+import Cairo from 'cairo';
 
 /** Duration of the dim overlay fade on focus changes, in milliseconds */
 const DIM_FADE_MS = 120;
@@ -97,6 +100,82 @@ export class BorderStyle {
 }
 
 /**
+ * A glow around a rounded box: a 9-slice image, hollow inside the box, that
+ * St's border-image stretches around any window size. The image is drawn
+ * once per color and size and kept in the runtime directory.
+ */
+export class GlowStyle {
+    readonly css: string;
+
+    /** How far the glow reaches outside the box, in stage pixels */
+    readonly spread: number;
+
+    /**
+     * `blur` and `radius` (the box's corner radius) are logical pixels;
+     * `scale` turns them into stage pixels.
+     */
+    constructor(start: string, end: string, radius: number, blur: number, scale: number) {
+        const s = parse_color(start) ?? { r: 1, g: 1, b: 1, a: 1 };
+        const e = parse_color(end) ?? s;
+        const c = mix(s, e, 0.5);
+
+        const spread = Math.max(1, Math.round(blur * scale));
+        const corner = Math.max(0, Math.round(radius * scale));
+        this.spread = spread;
+
+        const key = `${css({ ...c, a: 1 }).replace(/[^0-9,]/g, '')}-${spread}-${corner}`;
+        const path = `${glow_dir()}/glow-${key}.png`;
+        if (!GLib.file_test(path, GLib.FileTest.EXISTS)) draw_glow(path, c, spread, corner);
+
+        // The slices are the corners: glow plus box corner, in image pixels.
+        this.css = `border-image: url("file://${path}") ${spread + corner};`;
+    }
+}
+
+function glow_dir(): string {
+    const dir = `${GLib.get_user_runtime_dir()}/pop-shell`;
+    GLib.mkdir_with_parents(dir, 0o700);
+    return dir;
+}
+
+/**
+ * Draws the glow image: transparent inside a rounded box with `corner`
+ * radius whose edge is `spread` pixels from the image's, and outside it the
+ * color fading out quadratically over `spread` pixels.
+ */
+function draw_glow(path: string, color: Rgba, spread: number, corner: number) {
+    const k = spread + corner;
+    const size = 2 * k + 1;
+    const surface = new Cairo.ImageSurface(Cairo.Format.ARGB32, size, size);
+    const cr = new Cairo.Context(surface);
+    const half = size / 2;
+
+    for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+            // Distance outside the box, measured from its corner arcs.
+            const cx = Math.max(0, Math.abs(x + 0.5 - half) - (half - k));
+            const cy = Math.max(0, Math.abs(y + 0.5 - half) - (half - k));
+            const d = Math.hypot(cx, cy) - corner;
+            if (d <= 0) continue;
+
+            const t = Math.max(0, 1 - d / spread);
+            if (t === 0) continue;
+            cr.setSourceRGBA(color.r, color.g, color.b, color.a * t * t);
+            cr.rectangle(x, y, 1, 1);
+            cr.fill();
+        }
+    }
+
+    // Write to a temporary name first: another window may be reading it.
+    const tmp = `${path}.${GLib.get_monotonic_time()}`;
+    surface.writeToPNG(tmp);
+    cr.$dispose();
+    Gio.File.new_for_path(tmp).move(Gio.File.new_for_path(path), Gio.FileCopyFlags.OVERWRITE, null, null);
+}
+
+type GlowMode = 'off' | 'steady' | 'flash';
+
+/**
  * A window border drawn from eight plain St actors (four gradient edges and
  * four rounded corners) plus an optional dim overlay over the window.
  *
@@ -117,6 +196,23 @@ export class Border {
         reactive: false,
         opacity: 0,
     });
+
+    /**
+     * Soft glow around the window, stacked by its owner right below the
+     * window actor (and not parented by the border). Shows steadily or
+     * flashes once (focus changes).
+     */
+    readonly glow: St.Widget = new St.Widget({ reactive: false, visible: false });
+
+    private glow_mode: GlowMode = 'off';
+
+    private glow_style: GlowStyle | null = null;
+
+    /** Opacity a flash settles to: the steady glow's, or 0 to hide it */
+    private glow_settle: { style: GlowStyle | null; opacity: number } | null = null;
+
+    /** The border's outer rectangle, which the glow surrounds */
+    private outer: Rectangular | null = null;
 
     private pieces: St.Widget[] = [];
 
@@ -141,7 +237,86 @@ export class Border {
     }
 
     destroy() {
+        this.glow.destroy();
         this.actor.destroy();
+    }
+
+    private set_glow_style(style: GlowStyle) {
+        if (this.glow_style === style) return;
+        const spread_changed = this.glow_style?.spread !== style.spread;
+        this.glow_style = style;
+        this.glow.set_style(style.css);
+        if (spread_changed) this.place_glow();
+    }
+
+    private place_glow() {
+        const outer = this.outer;
+        const spread = this.glow_style?.spread ?? 0;
+        if (!outer) return;
+        this.glow.set_position(outer.x - spread, outer.y - spread);
+        this.glow.set_size(outer.width + 2 * spread, outer.height + 2 * spread);
+    }
+
+    /**
+     * Shows the glow steadily at `opacity` (0 to 1), or hides it when `css`
+     * is null. A running flash finishes first and
+     * then settles to this state.
+     */
+    set_glow(css: GlowStyle | null, opacity: number) {
+        const alpha = Math.round(Math.min(1, Math.max(0, opacity)) * 255);
+
+        if (this.glow_mode === 'flash') {
+            this.glow_settle = { style: css, opacity: css ? alpha : 0 };
+            return;
+        }
+
+        if (!css) {
+            if (this.glow_mode === 'off') return;
+            this.glow.remove_all_transitions();
+            this.glow.hide();
+            this.glow_mode = 'off';
+            return;
+        }
+
+        if (this.glow_mode === 'steady' && this.glow_style === css && this.glow.opacity === alpha) return;
+
+        this.set_glow_style(css);
+        this.glow.remove_all_transitions();
+        this.glow_mode = 'steady';
+        this.glow.opacity = alpha;
+        this.glow.show();
+    }
+
+    /**
+     * Flashes the glow: shows `css` fully opaque, then fades over
+     * `duration` milliseconds to the steady glow (`settle_css` at
+     * `settle_opacity`), or out when `settle_css` is null.
+     */
+    flash(css: GlowStyle, duration: number, settle_css: GlowStyle | null, settle_opacity: number) {
+        this.glow.remove_all_transitions();
+        this.glow_settle = {
+            style: settle_css,
+            opacity: settle_css ? Math.round(Math.min(1, Math.max(0, settle_opacity)) * 255) : 0,
+        };
+        this.glow_mode = 'flash';
+        this.set_glow_style(css);
+        this.glow.opacity = 255;
+        this.glow.show();
+
+        this.glow.ease({
+            opacity: this.glow_settle.style === css ? this.glow_settle.opacity : 0,
+            duration,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onStopped: (finished: boolean) => {
+                // An interrupting call (hide, another flash) takes over.
+                if (!finished || this.glow_mode !== 'flash') return;
+                const settle = this.glow_settle;
+                this.glow_settle = null;
+                this.glow_mode = 'off';
+                this.glow.hide();
+                if (settle?.style) this.set_glow(settle.style, settle.opacity / 255);
+            },
+        });
     }
 
     set_style(style: BorderStyle) {
@@ -170,6 +345,8 @@ export class Border {
         const { x, y, width: W, height: H } = outer;
         this.actor.set_position(x, y);
         this.actor.set_size(W, H);
+        this.outer = { x, y, width: W, height: H };
+        this.place_glow();
         this.overlay.set_position(frame.x - x, frame.y - y);
         this.overlay.set_size(frame.width, frame.height);
 
@@ -231,6 +408,12 @@ export class Border {
 
     hide() {
         this.actor.hide();
+        if (this.glow_mode !== 'off') {
+            this.glow.remove_all_transitions();
+            this.glow.hide();
+            this.glow_mode = 'off';
+            this.glow_settle = null;
+        }
     }
 
     get visible(): boolean {

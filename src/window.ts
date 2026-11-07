@@ -52,6 +52,9 @@ export class ShellWindow {
     // True while a tiling animation moves a clone of this window
     animating: boolean = false;
 
+    // Set when keyboard focus lands here, until the next border pass flashes the glow
+    private flash_requested: boolean = false;
+
     /**
      * Rectangle pop-shell last moved this window to, until the window
      * reaches it. Wayland clients resize asynchronously, so for a while the
@@ -85,7 +88,10 @@ export class ShellWindow {
 
         this.bind_window_events();
 
-        if (this.border) global.window_group.add_child(this.border.actor);
+        if (this.border) {
+            global.window_group.add_child(this.border.glow);
+            global.window_group.add_child(this.border.actor);
+        }
 
         ext.schedule_border_update();
     }
@@ -313,24 +319,42 @@ export class ShellWindow {
         if (!border) return;
 
         const settings = this.ext.settings;
+        const styles = this.ext.border_styles;
         const base = this.border_base_permitted();
         const ring = base && (focused ? settings.active_hint() : settings.inactive_hint());
         const dim = base && !focused ? settings.inactive_dim() : 0;
+        const glow = base && focused && styles.glow !== null;
 
-        if (!ring && !(base && settings.inactive_dim() > 0)) {
+        const flash = focused && this.flash_requested;
+        this.flash_requested = false;
+        const flash_ms = flash && base ? settings.focus_flash() : 0;
+
+        if (!ring && !glow && flash_ms === 0 && !(base && settings.inactive_dim() > 0)) {
             border.hide();
             border.set_dim(0, false);
             return;
         }
 
-        const styles = this.ext.border_styles;
         border.set_overlay_radius(this.corners?.enabled ? this.corner_radius() / this.ext.dpi : 0);
         border.set_ring_visible(ring);
         border.set_style(focused ? styles.active : styles.inactive);
         this.update_border_layout();
         border.set_dim(dim, true);
         border.show();
+
+        if (flash_ms > 0) {
+            border.flash(styles.flash, flash_ms, styles.glow, settings.active_hint_glow_opacity());
+        } else {
+            border.set_glow(glow ? styles.glow : null, settings.active_hint_glow_opacity());
+        }
+
         this.restack_border();
+    }
+
+    /** Flashes the glow on the next border pass, if this window is still focused then */
+    request_flash() {
+        this.flash_requested = true;
+        this.ext.schedule_border_update();
     }
 
     same_workspace() {
@@ -418,6 +442,12 @@ export class ShellWindow {
         }
 
         if (above.get_next_sibling() !== border) parent.set_child_above_sibling(border, above);
+
+        // The glow goes right below the window, which hides all but its spill.
+        const glow = this.border?.glow;
+        if (glow && glow.get_parent() === parent && actor.get_previous_sibling() !== glow) {
+            parent.set_child_below_sibling(glow, actor);
+        }
     }
 
     hide_border() {
