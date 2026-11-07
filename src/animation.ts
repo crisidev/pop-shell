@@ -57,6 +57,9 @@ export class TileAnimator {
         meta.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
         meta.move_frame(true, rect.x, rect.y);
 
+        // A window that is opening plays its open animation instead.
+        if (this.ext.effects.claim_open(window, rect)) return;
+
         if (!animate) return;
 
         // Keep the buffer's offsets around the frame (shadows, client decorations).

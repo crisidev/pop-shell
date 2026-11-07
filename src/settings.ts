@@ -289,6 +289,18 @@ export class ExtensionSettings {
         return this.ext.get_uint(ANIMATION_DURATION);
     }
 
+    open_animation(): string {
+        return this.ext.get_string('open-animation');
+    }
+
+    close_animation(): string {
+        return this.ext.get_string('close-animation');
+    }
+
+    open_close_duration(): number {
+        return this.ext.get_uint('open-close-duration');
+    }
+
     mouse_cursor_warp_to_last_position(): boolean {
         return this.ext.get_boolean(MOUSE_CURSOR_WARP_TO_LAST_POSITION);
     }

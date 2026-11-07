@@ -123,6 +123,9 @@ export class ShellWindow {
                 this.meta.connect('raised', () => {
                     this.window_raised();
                 }),
+                this.meta.connect('unmanaging', () => {
+                    this.ext.effects.on_unmanaging(this);
+                }),
             );
     }
 

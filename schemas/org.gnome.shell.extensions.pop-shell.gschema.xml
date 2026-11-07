@@ -234,6 +234,36 @@
             <summary>Duration of tiling animations, in milliseconds</summary>
         </key>
 
+        <key type="s" name="open-animation">
+            <choices>
+                <choice value="gnome"/>
+                <choice value="none"/>
+                <choice value="grow"/>
+                <choice value="zoom"/>
+                <choice value="fade"/>
+            </choices>
+            <default>'gnome'</default>
+            <summary>How windows open: GNOME's animation, none, grow out of the split they tile into, zoom in, or fade in</summary>
+        </key>
+
+        <key type="s" name="close-animation">
+            <choices>
+                <choice value="gnome"/>
+                <choice value="none"/>
+                <choice value="shrink"/>
+                <choice value="zoom"/>
+                <choice value="fade"/>
+            </choices>
+            <default>'gnome'</default>
+            <summary>How windows close: GNOME's animation, none, shrink into the sibling taking their space, zoom out, or fade out</summary>
+        </key>
+
+        <key type="u" name="open-close-duration">
+            <default>200</default>
+            <range min="50" max="1000"/>
+            <summary>Duration of pop-shell's open and close animations, in milliseconds</summary>
+        </key>
+
         <key type="b" name="mouse-cursor-warp-to-last-position">
             <default>false</default>
             <summary>When the pointer follows focus, return it to where it last was in that window</summary>

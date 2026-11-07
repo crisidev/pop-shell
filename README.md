@@ -78,6 +78,9 @@ The `com.System76.PopShell` D-Bus service also offers `ClearNotifications`.
 |---|---|---|---|
 | `animate-tiling` | `b` | `false` | Ease tiled windows into their new place (follows GNOME's animation setting) |
 | `animation-duration` | `u` | `150` | Animation length in milliseconds |
+| `open-animation` | `s` | `'gnome'` | How windows open: `gnome` (GNOME's), `none`, `grow` (out of the split the window tiles into), `zoom` or `fade` |
+| `close-animation` | `s` | `'gnome'` | How windows close: `gnome`, `none`, `shrink` (into the sibling taking the space), `zoom` or `fade` |
+| `open-close-duration` | `u` | `200` | Length of pop-shell's open and close animations, in milliseconds |
 
 ### Removed
 
