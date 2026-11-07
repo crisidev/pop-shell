@@ -16,9 +16,7 @@ let cached_level: number | null = null;
  */
 export function log_level(): number {
     if (cached_level === null) {
-        // log.js is at the level of prefs.js where the popshell Ext instance
-        // is not yet available or visible, so we have to use the built in
-        // ExtensionUtils to get the current settings
+        // The Ext instance may not exist yet, so read the extension's own settings.
         settings = globalThis.popShellExtension.getSettings();
         settings.connect('changed::log-level', () => (cached_level = settings.get_uint('log-level')));
         cached_level = settings.get_uint('log-level') as number;

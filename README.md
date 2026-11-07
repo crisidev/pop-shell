@@ -76,14 +76,15 @@ The `com.System76.PopShell` D-Bus service also offers `ClearNotifications`.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `animate-tiling` | `b` | `false` | Ease tiled windows into their new place (also in the panel menu; follows GNOME's animation setting) |
+| `animate-tiling` | `b` | `false` | Ease tiled windows into their new place (follows GNOME's animation setting) |
 | `animation-duration` | `u` | `150` | Animation length in milliseconds |
 
 ### Removed
 
 The launcher (use any launcher you like), window title hiding and other X11-only code, the GTK 3 color
-picker and floating exceptions dialogs (colors and float rules are settings), and support for GNOME
-releases before 49.
+picker and floating exceptions dialogs (colors and float rules are settings), the preferences window and
+the top bar menu (every option is a GSettings key: use `gsettings`, `dconf` or home-manager), and support
+for GNOME releases before 49.
 
 ### Example
 
@@ -276,9 +277,8 @@ Disabled by default, this mode manages windows using a tree-based tiling window 
 ### Customizing the Floating Window List
 
 In this fork, the `float-rules` setting holds `(class, title)` regular expressions of windows that float
-(see [About this fork](#about-this-fork)), checked before pop-shell's built-in rules. To add one from the
-desktop, pick "Add Floating Exception" in the extension's menu and click a window in the overview. Window
-classes can be found with Looking Glass (`Alt` + `F2`, `lg`, Windows tab).
+(see [About this fork](#about-this-fork)), checked before pop-shell's built-in rules. Window classes can
+be found with Looking Glass (`Alt` + `F2`, `lg`, Windows tab).
 
 The floating exceptions dialog and the float list in `config.json` are gone; `config.json` now only holds
 the `log_on_focus` and `skiptaskbarhidden` debugging options.

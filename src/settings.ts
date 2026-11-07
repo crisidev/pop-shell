@@ -1,6 +1,5 @@
 // const Me = imports.misc.extensionUtils.getCurrentExtension();
 import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
 import Gdk from 'gi://Gdk';
 import { get_current_path } from './paths.js';
 
@@ -178,14 +177,6 @@ export class ExtensionSettings {
         return this.ext.get_value(FLOAT_RULES).deep_unpack();
     }
 
-    /** Appends a float rule unless an identical one exists */
-    add_float_rule(wm_class: string, title: string) {
-        const rules = this.float_rules();
-        if (rules.some(([c, t]) => c === wm_class && t === title)) return;
-        rules.push([wm_class, title]);
-        this.ext.set_value(FLOAT_RULES, new (GLib as any).Variant('a(ss)', rules));
-    }
-
     float_above(): boolean {
         return this.ext.get_boolean(FLOAT_ABOVE);
     }
@@ -312,89 +303,11 @@ export class ExtensionSettings {
 
     // Setters
 
-    set_active_hint(set: boolean) {
-        this.ext.set_boolean(ACTIVE_HINT, set);
-    }
-
-    set_active_hint_border_radius(set: number) {
-        this.ext.set_uint(ACTIVE_HINT_BORDER_RADIUS, set);
-    }
-
-    set_active_hint_border_width(set: number) {
-        this.ext.set_uint(ACTIVE_HINT_BORDER_WIDTH, set);
-    }
-
-    set_animate_tiling(set: boolean) {
-        this.ext.set_boolean(ANIMATE_TILING, set);
-    }
-
-    set_inactive_hint(set: boolean) {
-        this.ext.set_boolean(INACTIVE_HINT, set);
-    }
-
-    set_stacking_with_mouse(set: boolean) {
-        this.ext.set_boolean(STACKING_WITH_MOUSE, set);
-    }
-
-    set_column_size(size: number) {
-        this.ext.set_uint(COLUMN_SIZE, size);
-    }
-
     set_edge_tiling(enable: boolean) {
         this.mutter?.set_boolean(EDGE_TILING, enable);
     }
 
-    set_gap_inner(gap: number) {
-        this.ext.set_uint(GAP_INNER, gap);
-    }
-
-    set_gap_outer(gap: number) {
-        this.ext.set_uint(GAP_OUTER, gap);
-    }
-
-    set_hint_color_rgba(rgba: string) {
-        let valid_color = new Gdk.RGBA().parse(rgba);
-
-        if (valid_color) {
-            this.ext.set_string(HINT_COLOR_RGBA, rgba);
-        } else {
-            this.ext.set_string(HINT_COLOR_RGBA, DEFAULT_RGBA_COLOR);
-        }
-    }
-
-    set_row_size(size: number) {
-        this.ext.set_uint(ROW_SIZE, size);
-    }
-
-    set_smart_gaps(set: boolean) {
-        this.ext.set_boolean(SMART_GAPS, set);
-    }
-
-    set_snap_to_grid(set: boolean) {
-        this.ext.set_boolean(SNAP_TO_GRID, set);
-    }
-
     set_tile_by_default(set: boolean) {
         this.ext.set_boolean(TILE_BY_DEFAULT, set);
-    }
-
-    set_log_level(set: number) {
-        this.ext.set_uint(LOG_LEVEL, set);
-    }
-
-    set_show_skiptaskbar(set: boolean) {
-        this.ext.set_boolean(SHOW_SKIPTASKBAR, set);
-    }
-
-    set_mouse_cursor_follows_active_window(set: boolean) {
-        this.ext.set_boolean(MOUSE_CURSOR_FOLLOWS_ACTIVE_WINDOW, set);
-    }
-
-    set_mouse_cursor_focus_location(set: number) {
-        this.ext.set_uint(MOUSE_CURSOR_FOCUS_LOCATION, set);
-    }
-
-    set_max_window_width(set: number) {
-        this.ext.set_uint(MAX_WINDOW_WIDTH, set);
     }
 }

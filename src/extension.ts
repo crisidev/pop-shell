@@ -8,7 +8,6 @@ import * as GrabOp from './grab_op.js';
 import * as Keybindings from './keybindings.js';
 import * as Lib from './lib.js';
 import * as log from './log.js';
-import * as PanelSettings from './panel_settings.js';
 import * as Rect from './rectangle.js';
 import * as Settings from './settings.js';
 import * as Tiling from './tiling.js';
@@ -19,7 +18,6 @@ import * as utils from './utils.js';
 import * as Executor from './executor.js';
 import * as movement from './movement.js';
 import * as stack from './stack.js';
-import * as add_exception from './dialog_add_exception.js';
 import * as exec from './executor.js';
 import * as dbus_service from './dbus_service.js';
 import { BorderStyle, GlowStyle } from './border.js';
@@ -34,7 +32,6 @@ import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import type { Entity } from './ecs.js';
 import type { ExtEvent } from './events.js';
 import { Rectangle } from './rectangle.js';
-import type { Indicator } from './panel_settings.js';
 
 import { Fork } from './fork.js';
 
@@ -71,7 +68,6 @@ const {
     layoutManager,
     loadTheme,
     overview,
-    panel,
     setThemeStylesheet,
     screenShield,
     sessionMode,
@@ -131,9 +127,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     // State
 
-    button: any = null;
-    button_gio_icon_auto_on: any = null;
-    button_gio_icon_auto_off: any = null;
 
     conf: Config.Config = new Config.Config();
 
@@ -191,9 +184,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     private stacks_dirty: boolean = false;
 
     drag_signal: null | SignalID = null;
-
-    /** If set, the user is currently selecting a window to add to floating exceptions */
-    exception_selecting: boolean = false;
 
     /** The number of pixels between windows */
     gap_inner: number = 0;
@@ -589,41 +579,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         this.conf.set_extra_float(this.settings.float_rules().map(([c, t]) => ({ class: c || undefined, title: t || undefined })));
     }
 
-    exception_add(win: Window.ShellWindow) {
-        this.exception_selecting = false;
-        // The float-rules change handler re-applies tiling.
-        let d = new add_exception.AddExceptionDialog(
-            // Cancel
-            () => {},
-            // this_app
-            () => {
-                let wmclass = win.meta.get_wm_class();
-                if (wmclass !== null && wmclass.length === 0) {
-                    wmclass = win.name(this);
-                }
-
-                if (wmclass) this.settings.add_float_rule(`^${escape_regex(wmclass)}$`, '');
-            },
-            // current-window
-            () => {
-                let wmclass = win.meta.get_wm_class();
-                if (wmclass) {
-                    this.settings.add_float_rule(`^${escape_regex(wmclass)}$`, `^${escape_regex(win.title())}$`);
-                }
-            },
-            () => {},
-        );
-        d.open();
-    }
-
-    exception_select() {
-        GLib.timeout_add(GLib.PRIORITY_LOW, 500, () => {
-            this.exception_selecting = true;
-            overview.show();
-            return false;
-        });
-    }
-
     exit_modes() {
         this.tiler.exit(this);
         this.overlay.visible = false;
@@ -912,10 +867,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         scheduler.setForeground(win.meta);
 
         this.size_signals_unblock(win);
-
-        if (this.exception_selecting) {
-            this.exception_add(win);
-        }
 
         // Track history of focused windows, but do not permit duplicates.
         if (this.prev_focused[1] !== win.entity) {
@@ -2111,14 +2062,10 @@ export class Ext extends Ecs.System<ExtEvent> {
                     perf.configure(this.settings.perf_threshold());
                     break;
                 case 'active-hint':
-                    if (indicator) indicator.toggle_active.setToggleState(this.settings.active_hint());
-
                     this.refresh_gaps();
                     this.schedule_border_update();
                     break;
                 case 'inactive-hint':
-                    if (indicator) indicator.toggle_inactive.setToggleState(this.settings.inactive_hint());
-
                     this.refresh_gaps();
                     this.schedule_border_update();
                     break;
@@ -2135,7 +2082,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                     this.panel_hint.sync();
                     break;
                 case 'animate-tiling':
-                    if (indicator) indicator.toggle_animations.setToggleState(this.settings.animate_tiling());
                     if (!this.settings.animate_tiling()) this.animator.finish_all();
                     break;
                 case 'float-above':
@@ -2199,10 +2145,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
 
         this.connect(sessionMode, 'updated', () => {
-            if (indicator) {
-                indicator.button.visible = !sessionMode.isLocked;
-            }
-
             if (sessionMode.isLocked) {
                 this.exit_modes();
             }
@@ -2488,9 +2430,6 @@ export class Ext extends Ecs.System<ExtEvent> {
             this.auto_tiler = null;
             this.settings.set_tile_by_default(false);
 
-            if (indicator) indicator.toggle_tiled.setToggleState(false);
-
-            this.button.icon.gicon = this.button_gio_icon_auto_off; // type: Gio.Icon
 
         }
     }
@@ -2499,8 +2438,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         this.settings.set_edge_tiling(false);
         this.schedule_border_update();
         this.register_fn(() => this.sync_all_float_above());
-
-        if (indicator) indicator.toggle_tiled.setToggleState(true);
 
         const original = this.active_workspace();
 
@@ -2514,7 +2451,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         this.auto_tiler = tiler;
 
         this.settings.set_tile_by_default(true);
-        this.button.icon.gicon = this.button_gio_icon_auto_on; // type: Gio.Icon
 
         for (const window of this.windows.values()) {
             if (window.is_tilable(this)) {
@@ -2994,7 +2930,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 }
 
 let ext: Ext | null = null;
-let indicator: Indicator | null = null;
 
 declare global {
     var popShellExtension: any;
@@ -3038,11 +2973,6 @@ export default class PopShellExtension extends Extension {
         layoutManager.addChrome(ext.overlay);
         ext.update_overlay_color();
 
-        if (!indicator) {
-            indicator = new PanelSettings.Indicator(ext);
-            panel.addToStatusArea('pop-shell', indicator.button);
-        }
-
         ext.keybindings.enable(ext.keybindings.global).enable(ext.keybindings.window_focus);
 
         if (ext.settings.tile_by_default()) {
@@ -3079,11 +3009,6 @@ export default class PopShellExtension extends Extension {
             }
 
             _hide_skip_taskbar_windows();
-        }
-
-        if (indicator) {
-            indicator.destroy();
-            indicator = null;
         }
 
         enable_window_attention_handler();
@@ -3483,11 +3408,6 @@ function is_valid_minimize_to_tray(meta_win: Meta.Window, ext: Ext) {
         !gnome_shell_wm_class;
 
     return valid_min_to_tray;
-}
-
-/** Escapes text for use as a literal inside a regular expression */
-function escape_regex(text: string): string {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** Connector name of each connected monitor index, from the DRM connectors in sysfs */
