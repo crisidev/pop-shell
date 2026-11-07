@@ -2454,21 +2454,24 @@ export default class PopShellExtension extends Extension {
     }
 }
 
+/**
+ * GNOME Shell's handler posting "‹app› is ready" notifications for windows
+ * that ask for attention. GNOME connects it with connectObject, owned by the
+ * handler, so pop-shell turns it off by disconnecting the handler's signals
+ * while it is enabled, and connects them again, as GNOME does, when disabled.
+ */
 const handler = windowAttentionHandler;
 
 function enable_window_attention_handler() {
-    if (handler && !handler._windowDemandsAttentionId) {
-        handler._windowDemandsAttentionId = global.display.connect('window-demands-attention', (display, window) => {
-            handler._onWindowDemandsAttention(display, window);
-        });
-    }
+    if (!handler) return;
+    const display = global.display as any;
+    display.disconnectObject(handler);
+    const notify = handler._onWindowDemandsAttention.bind(handler);
+    display.connectObject('window-demands-attention', notify, 'window-marked-urgent', notify, handler);
 }
 
 function disable_window_attention_handler() {
-    if (handler && handler._windowDemandsAttentionId) {
-        global.display.disconnect(handler._windowDemandsAttentionId);
-        handler._windowDemandsAttentionId = null;
-    }
+    if (handler) (global.display as any).disconnectObject(handler);
 }
 
 function stylesheet_path(name: string) {
