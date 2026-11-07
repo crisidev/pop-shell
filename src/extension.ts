@@ -16,7 +16,6 @@ import * as node from './node.js';
 import * as utils from './utils.js';
 import * as Executor from './executor.js';
 import * as movement from './movement.js';
-import * as stack from './stack.js';
 import * as exec from './executor.js';
 import * as dbus_service from './dbus_service.js';
 import { BorderStyle, GlowStyle } from './border.js';
@@ -151,8 +150,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Precomputed border styles for focused and unfocused windows */
     border_styles: BorderStyles = this.create_border_styles();
 
-    /** Cached inline styles for stack tabs, following the hint colors */
-    tab_styles: { active: string; inactive: string; urgent: string } = this.create_tab_styles();
 
     /** Window focused before the latest focus change, to give focus back to floats */
     private focused_meta: Meta.Window | null = null;
@@ -163,8 +160,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     /** Set once the rounded corner effect failed, so it is logged only once */
     private corners_failed: boolean = false;
 
-    /** Set when the window stack changed and stack tabs must follow, before the next frame */
-    private stacks_dirty: boolean = false;
 
     drag_signal: null | SignalID = null;
 
@@ -363,14 +358,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                                     if (fork) {
                                         this.auto_tiler.reflow(this, win.entity);
                                     }
-                                    if (win.stack !== null) {
-                                        this.auto_tiler.forest.stacks.get(win.stack)?.set_visible(true);
-                                    }
-                                } else {
-                                    // not full screened
-                                    if (win.stack !== null) {
-                                        this.auto_tiler.forest.stacks.get(win.stack)?.set_visible(false);
-                                    }
                                 }
                             }
                         }
@@ -555,17 +542,11 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     focus_left() {
-        this.stack_select(
-            (id, stack) => (id === 0 ? null : stack.tabs[id - 1].entity),
-            () => this.activate_window(this.focus_selector.left(this, null)),
-        );
+        this.activate_window(this.focus_selector.left(this, null));
     }
 
     focus_right() {
-        this.stack_select(
-            (id, stack) => (stack.tabs.length > id + 1 ? stack.tabs[id + 1].entity : null),
-            () => this.activate_window(this.focus_selector.right(this, null)),
-        );
+        this.activate_window(this.focus_selector.right(this, null));
     }
 
     focus_down() {
@@ -578,44 +559,6 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     focus_window(): Window.ShellWindow | null {
         return this.get_window(display.get_focus_window());
-    }
-
-    stack_select(select: (id: number, stack: stack.Stack) => Entity | null, focus_shift: () => void) {
-        const switched = this.stack_switch((stack: any) => {
-            if (!stack) return false;
-
-            const stack_con = this.auto_tiler?.forest.stacks.get(stack.idx);
-            if (stack_con) {
-                const id = stack_con.active_id;
-                if (id !== -1) {
-                    const next = select(id, stack_con);
-                    if (next) {
-                        stack_con.activate(next);
-                        const window = this.windows.get(next);
-                        if (window) {
-                            window.activate();
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            return false;
-        });
-
-        if (!switched) {
-            focus_shift();
-        }
-    }
-
-    stack_switch(apply: (stack: node.NodeStack) => boolean) {
-        const window = this.focus_window();
-        if (window) {
-            if (this.auto_tiler) {
-                const node = this.auto_tiler.find_stack(window.entity);
-                return node ? apply(node[1].inner as node.NodeStack) : false;
-            }
-        }
     }
 
     /// Fetches the window component from the entity associated with the metacity window metadata.
@@ -661,7 +604,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     on_active_workspace_changed() {
         this.register_fn(() => {
             this.exit_modes();
-            this.restack();
 
             const activate_window = (window: Window.ShellWindow) => {
                 this.on_focused(window);
@@ -722,8 +664,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         const window = this.windows.get(win);
         if (!window) return;
 
-        const stack = window.stack;
-
         window.destroying = true;
 
         // Disconnect all signals on this window
@@ -738,31 +678,12 @@ export class Ext extends Ecs.System<ExtEvent> {
             if (entity) {
                 const fork = this.auto_tiler.forest.forks.get(entity);
                 if (fork?.right?.is_window(win)) {
-                    const entity = fork.right.inner.kind === 3 ? fork.right.inner.entities[0] : fork.right.inner.entity;
-
-                    this.windows.with(entity, (sibling) => sibling.activate());
+                    this.windows.with(fork.right.inner.entity, (sibling) => sibling.activate());
                 }
             }
         }
 
         if (this.auto_tiler) this.auto_tiler.detach_window(this, win);
-
-        // If destroyed window belonged to a stack, ensure that the next window
-        // to be focused is also a window in the same stack
-        if (this.auto_tiler && stack !== null) {
-            const stack_object = this.auto_tiler.forest.stacks.get(stack);
-            const prev = this.prev_focused[1];
-            if (stack_object && prev) {
-                const prev_window = this.windows.get(prev);
-                if (prev_window) {
-                    if (prev_window.stack !== stack) {
-                        stack_object.auto_activate();
-                        this.prev_focused = [null, stack_object.active];
-                        this.windows.get(stack_object.active)?.activate();
-                    }
-                }
-            }
-        }
 
         this.movements.remove(win);
         this.windows.remove(win);
@@ -781,11 +702,6 @@ export class Ext extends Ecs.System<ExtEvent> {
             this.prev_focused[1] = win.entity;
         }
 
-        // Update the active tab in the stack.
-        if (null !== this.auto_tiler && null !== win.stack) {
-            ext?.auto_tiler?.forest.stacks.get(win.stack)?.activate(win.entity);
-        }
-
         this.unmaximize_workspace(win);
 
         this.schedule_border_update();
@@ -802,13 +718,8 @@ export class Ext extends Ecs.System<ExtEvent> {
                 prev.name(this) !== win.name(this) &&
                 prev.workspace_id() === win.workspace_id()
             ) {
-                if (prev.rect().contains(win.rect())) {
-                    if (prev.is_maximized()) {
-                        prev.meta.unmaximize();
-                    }
-                } else if (prev.stack) {
+                if (prev.rect().contains(win.rect()) && prev.is_maximized()) {
                     prev.meta.unmaximize();
-                    this.auto_tiler.forest.stacks.get(prev.stack)?.restack();
                 }
             }
         }
@@ -821,8 +732,7 @@ export class Ext extends Ecs.System<ExtEvent> {
                 `  monitor: ${win.meta.get_monitor()},\n` +
                 `  name: ${win.name(this)},\n` +
                 `  rect: ${win.rect().fmt()},\n` +
-                `  workspace: ${win.workspace_id()},\n` +
-                `  stack: ${win.stack},\n`;
+                `  workspace: ${win.workspace_id()},\n`;
 
             if (this.auto_tiler) {
                 msg += `  fork: (${this.auto_tiler.attached.get(win.entity)}),\n`;
@@ -875,12 +785,6 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     update_borders() {
-        // Stack tabs first: borders stack above them.
-        if (this.stacks_dirty) {
-            this.stacks_dirty = false;
-            for (const stack of this.auto_tiler?.forest.stacks.values() ?? []) stack.restack();
-        }
-
         this.pointer.invalidate_hover();
         const focus = this.focus_window();
         for (const win of this.windows.values()) {
@@ -997,30 +901,9 @@ export class Ext extends Ecs.System<ExtEvent> {
         };
     }
 
-    /**
-     * Active tabs carry the active hint gradient, inactive ones the
-     * unfocused hint color; urgent tabs keep their stylesheet color.
-     */
-    create_tab_styles(): { active: string; inactive: string; urgent: string } {
-        const s = this.settings;
-        const start = s.hint_color_rgba();
-        const end = s.hint_color_end_rgba();
-        const text = (color: string) => (utils.is_dark(color) ? 'white' : 'black');
-
-        return {
-            active:
-                `background-gradient-direction: horizontal; background-gradient-start: ${start}; ` +
-                `background-gradient-end: ${end}; color: ${text(start)};`,
-            inactive: `background-color: ${s.inactive_hint_color_rgba()}; color: white;`,
-            urgent: '',
-        };
-    }
-
     /** Rebuilds border styles after a settings or scale change */
     update_border_styles() {
         this.border_styles = this.create_border_styles();
-        this.tab_styles = this.create_tab_styles();
-        for (const stack of this.auto_tiler?.forest.stacks.values() ?? []) stack.restyle();
         this.panel_hint.update();
         this.refresh_gaps();
         this.update_overlay_color();
@@ -1034,20 +917,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         gdk.parse(utils.is_dark(color) ? 'rgba(53, 132, 228, 0.3)' : color);
         gdk.alpha = 0.3;
         this.overlay.set_style(`background: ${gdk.to_string()}`);
-    }
-
-    maximized_on_active_display(): boolean {
-        const aws = this.workspace_id();
-        for (const window of this.windows.values()) {
-            if (!window.actor_exists()) continue;
-
-            const wws = this.workspace_id(window);
-            if (aws[0] === wws[0] && aws[1] === wws[1]) {
-                if (window.is_maximized()) return true;
-            }
-        }
-
-        return false;
     }
 
     on_gap_inner() {
@@ -1198,12 +1067,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                     const forest = this.auto_tiler.forest;
                     const fork = forest.forks.get(fork_entity);
                     if (fork) {
-                        if (win.stack) {
-                            const tab_dimension = this.dpi * stack.TAB_HEIGHT;
-                            crect.height += tab_dimension;
-                            crect.y -= tab_dimension;
-                        }
-
                         let top_level = forest.find_toplevel(this.workspace_id());
                         if (top_level) {
                             crect.clamp((forest.forks.get(top_level) as Fork).area);
@@ -1333,16 +1196,14 @@ export class Ext extends Ecs.System<ExtEvent> {
                     } else if (attach_to) {
                         const is_sibling = this.auto_tiler.windows_are_siblings(entity, attach_to.entity);
 
-                        [area, monitor_attachment] =
-                            (win.stack === null && attach_to.stack === null && is_sibling) ||
-                                (win.stack === null && is_sibling)
-                                ? [fork.area, false]
-                                : [attach_to.meta.get_frame_rect(), false];
+                        [area, monitor_attachment] = is_sibling
+                            ? [fork.area, false]
+                            : [attach_to.meta.get_frame_rect(), false];
                     } else {
                         return true;
                     }
 
-                    const result = monitor_attachment ? null : auto_tiler.cursor_placement(this, area, cursor);
+                    const result = monitor_attachment ? null : auto_tiler.cursor_placement(area, cursor);
 
                     if (!result) {
                         this.overlay.x = area.x;
@@ -1440,45 +1301,22 @@ export class Ext extends Ecs.System<ExtEvent> {
                 const fork = this.auto_tiler.forest.forks.get(attached);
                 if (!fork) return;
 
-                let attachment: boolean | number;
-                if (win.stack !== null) {
-                    attachment = win.stack;
-                } else {
-                    attachment = fork.left.is_window(win.entity);
-                }
-
-                win.was_attached_to = [attached, attachment];
+                win.was_attached_to = this.auto_tiler.forest.place_of(attached, win.entity);
                 this.auto_tiler.detach_window(this, win.entity);
             } else if (!this.contains_tag(win.entity, Tags.Floating)) {
-                if (win.was_attached_to) {
-                    const [entity, attachment] = win.was_attached_to;
-                    delete win.was_attached_to;
+                const place = win.was_attached_to;
+                delete win.was_attached_to;
 
+                // Back beside its sibling, as it was before it was minimized.
+                if (place) {
                     const tiler = this.auto_tiler;
-
-                    const fork = tiler.forest.forks.get(entity);
-                    if (fork) {
-                        if (typeof attachment === 'boolean') {
-                            tiler.forest.attach_fork(this, fork, win.entity, attachment);
-                            tiler.tile(this, fork, fork.area);
-                            return;
-                        } else {
-                            const stack = tiler.forest.stacks.get(attachment);
-                            if (stack) {
-                                const stack_info = tiler.find_stack(stack.active);
-                                if (stack_info) {
-                                    const node = stack_info[1].inner as node.NodeStack;
-
-                                    win.stack = attachment;
-                                    node.entities.push(win.entity);
-                                    tiler.update_stack(this, node);
-                                    tiler.forest.on_attach(fork.entity, win.entity);
-                                    stack.activate(win.entity);
-                                    tiler.tile(this, fork, fork.area);
-                                    return;
-                                }
-                            }
-                        }
+                    const id = this.workspace_id(win);
+                    const attached = tiler.forest.reattach(this, win.entity, place, id, (e) => tiler.attached.get(e));
+                    const top = attached ? tiler.forest.find_toplevel(id) : null;
+                    const top_fork = top ? tiler.forest.forks.get(top) : null;
+                    if (top_fork) {
+                        tiler.tile(this, top_fork, top_fork.area);
+                        return;
                     }
                 }
 
@@ -1611,17 +1449,6 @@ export class Ext extends Ecs.System<ExtEvent> {
                                 if (fork) fork.workspace = value;
                             } else if (child.inner.kind === 2) {
                                 window_move(this, child.inner.entity, value);
-                            } else if (child.inner.kind === 3) {
-                                let stack = this.auto_tiler.forest.stacks.get(child.inner.idx);
-                                if (stack) {
-                                    stack.workspace = value;
-
-                                    for (const entity of child.inner.entities) {
-                                        window_move(this, entity, value);
-                                    }
-
-                                    stack.restack();
-                                }
                             }
                         }
                     }
@@ -1656,22 +1483,6 @@ export class Ext extends Ecs.System<ExtEvent> {
             (current) => current > number,
             (prev) => prev - 1,
         );
-    }
-
-    restack() {
-        // NOTE: Workaround for GNOME Shell showing our hidden windows on a workspace switch
-        let attempts = 0;
-        GLib.timeout_add(GLib.PRIORITY_LOW, 50, () => {
-            if (this.auto_tiler) {
-                for (const container of this.auto_tiler.forest.stacks.values()) {
-                    container.restack();
-                }
-            }
-
-            let x = attempts;
-            attempts += 1;
-            return x < 10;
-        });
     }
 
     /**
@@ -1978,7 +1789,6 @@ export class Ext extends Ecs.System<ExtEvent> {
         });
 
         this.connect(display, 'restacked', () => {
-            this.stacks_dirty = true;
             this.schedule_border_update();
         });
 
@@ -2346,10 +2156,6 @@ export class Ext extends Ecs.System<ExtEvent> {
             }
 
             if (renumbered) {
-                for (const stack of forest.stacks.values()) {
-                    stack.monitor = follow_connector(stack.monitor) ?? stack.monitor;
-                }
-
                 for (const [entity] of this.windows.iter()) {
                     this.monitors.with(entity, ([mon, ws]) => {
                         this.monitors.insert(entity, [follow_connector(mon) ?? mon, ws]);

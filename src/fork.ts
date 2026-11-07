@@ -4,11 +4,8 @@ import type { Ext } from './extension.js';
 import type { Rectangle } from './rectangle.js';
 import type { Node } from './node.js';
 
-import * as Ecs from './ecs.js';
 import * as Lib from './lib.js';
-import * as node from './node.js';
 import * as Rect from './rectangle.js';
-import { ShellWindow } from './window.js';
 
 const XPOS = 0;
 const YPOS = 1;
@@ -24,13 +21,10 @@ export class Fork {
     right: Node | null;
     area: Rectangle;
     entity: Entity;
-    on_primary_display: boolean;
     workspace: number;
     length_left: number;
-    prev_length_left: number;
     prev_ratio: number = 0.5;
     monitor: number;
-    minimum_ratio: number = 0.1;
     orientation: Lib.Orientation = Lib.Orientation.HORIZONTAL;
 
     orientation_changed: boolean = false;
@@ -50,13 +44,11 @@ export class Fork {
         monitor: MonitorID,
         orient: Lib.Orientation,
     ) {
-        this.on_primary_display = global.display.get_primary_monitor() === monitor;
         this.area = area;
         this.left = left;
         this.right = right;
         this.workspace = workspace;
         this.length_left = orient === Lib.Orientation.HORIZONTAL ? this.area.width / 2 : this.area.height / 2;
-        this.prev_length_left = this.length_left;
         this.entity = entity;
         this.orientation = orient;
         this.monitor = monitor;
@@ -99,64 +91,6 @@ export class Fork {
         return this.is_horizontal() ? this.area.width : this.area.height;
     }
 
-    /** Replaces the association of a window in a fork with another */
-    replace_window(ext: Ext, a: ShellWindow, b: ShellWindow): null | (() => void) {
-        let closure = null;
-
-        let check_right = () => {
-            if (this.right) {
-                const inner = this.right.inner;
-                if (inner.kind === 2) {
-                    closure = () => {
-                        inner.entity = b.entity;
-                    };
-                } else if (inner.kind === 3) {
-                    const idx = node.stack_find(inner, a.entity);
-                    if (idx === null) {
-                        closure = null;
-                        return;
-                    }
-
-                    closure = () => {
-                        node.stack_replace(ext, inner, b);
-                        inner.entities[idx] = b.entity;
-                    };
-                }
-            }
-        };
-
-        switch (this.left.inner.kind) {
-            case 1:
-                check_right();
-                break;
-            case 2:
-                const inner = this.left.inner;
-                if (Ecs.entity_eq(inner.entity, a.entity)) {
-                    closure = () => {
-                        inner.entity = b.entity;
-                    };
-                } else {
-                    check_right();
-                }
-
-                break;
-            case 3:
-                const inner_s = this.left.inner as node.NodeStack;
-                let idx = node.stack_find(inner_s, a.entity);
-                if (idx !== null) {
-                    const id = idx;
-                    closure = () => {
-                        node.stack_replace(ext, inner_s, b);
-                        inner_s.entities[id] = b.entity;
-                    };
-                } else {
-                    check_right();
-                }
-        }
-
-        return closure;
-    }
-
     /** Sets a new area for this fork */
     set_area(area: Rectangle): Rectangle {
         this.area = area;
@@ -170,7 +104,6 @@ export class Fork {
     set_ratio(left_length: number): Fork {
         const fork_len = this.is_horizontal() ? this.area.width : this.area.height;
         const clamped = Math.round(Math.max(256, Math.min(fork_len - 256, left_length)));
-        this.prev_length_left = clamped;
         this.length_left = clamped;
         return this;
     }
@@ -240,11 +173,9 @@ export class Fork {
 
     migrate(ext: Ext, forest: Forest, area: Rectangle, monitor: number, workspace: number) {
         if (ext.auto_tiler && this.is_toplevel) {
-            const primary = global.display.get_primary_monitor() === monitor;
 
             this.monitor = monitor;
             this.workspace = workspace;
-            this.on_primary_display = primary;
 
             let blocked = new Array();
 
@@ -257,36 +188,17 @@ export class Fork {
                         if (!cfork) continue;
                         cfork.workspace = workspace;
                         cfork.monitor = monitor;
-                        cfork.on_primary_display = primary;
                         break;
                     case 2:
                         let window = ext.windows.get(child.inner.entity);
                         if (window) {
                             ext.size_signals_block(window);
                             window.reassignment = false;
-                            window.known_workspace = workspace;
                             window.meta.change_workspace_by_index(workspace, true);
                             ext.monitors.insert(window.entity, [monitor, workspace]);
                             blocked.push(window);
                         }
                         break;
-                    case 3:
-                        for (const entity of child.inner.entities) {
-                            let stack = ext.auto_tiler.forest.stacks.get(child.inner.idx);
-                            if (stack) {
-                                stack.workspace = workspace;
-                            }
-
-                            let window = ext.windows.get(entity);
-
-                            if (window) {
-                                ext.size_signals_block(window);
-                                window.known_workspace = workspace;
-                                window.meta.change_workspace_by_index(workspace, true);
-                                ext.monitors.insert(window.entity, [monitor, workspace]);
-                                blocked.push(window);
-                            }
-                        }
                 }
             }
 

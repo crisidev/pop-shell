@@ -7,14 +7,3 @@
 .pop-shell-overlay {
     background-color: rgba(53, 132, 228, 0.3);
 }
-
-
-/* Tab colors follow the window hints (see Ext.create_tab_styles) */
-.pop-shell-tab {
-    padding: 0 1em;
-}
-
-.pop-shell-tab-urgent {
-    background-color: #db4b4b;
-    color: white;
-}

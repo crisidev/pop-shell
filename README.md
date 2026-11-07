@@ -5,7 +5,7 @@
 https://github.com/user-attachments/assets/819550b1-52cb-486e-af02-d30908601296
 
 A fork of [Pop Shell](https://github.com/pop-os/shell), System76's GNOME Shell extension that adds
-i3-style tiling to GNOME: keyboard-driven focus and movement, an auto-tiling tree with stacks, and
+i3-style tiling to GNOME: keyboard-driven focus and movement, an auto-tiling tree, and
 floating windows that coexist with it.
 
 This fork targets **GNOME 49 and 50 on Wayland** only (branch `master_noble`). It adds window hints and
@@ -50,6 +50,8 @@ home-manager. Every option is documented in **[OPTIONS.md](OPTIONS.md)**.
   `tile-move-*-global`.
 - Pop Shell's move-to-monitor and move-to-workspace up/down shortcuts: GNOME's own do the same.
 - Showing windows that skip the taskbar (minimized to tray) in the overview and Alt+Tab.
+- Stacks (windows tabbed together in one tile), with `toggle-stacking`, `toggle-stacking-global` and
+  `stacking-with-mouse`: dropping a window onto another always splits it.
 - The System76 scheduler integration.
 - Window title hiding and other X11-only code, and support for GNOME before 49.
 
@@ -89,7 +91,7 @@ See [OPTIONS.md](OPTIONS.md) for every key, home-manager examples and the keyboa
 - `Super` + `Return`: window management mode, to resize the focused tile with `Shift` + arrows;
   `Return` or `Escape` leaves it. Bind `tile-move-*-global` to move tiles around.
 - `Super` + `y`: toggle auto-tiling. `Super` + `g`: float or tile a window. `Super` + `o`: toggle a
-  split's orientation. `Super` + `s`: stack windows into tabs.
+  split's orientation.
 - `pop-switch-workspace-N` and `pop-move-workspace-N` switch workspace and move windows to one.
 
 ## Develop

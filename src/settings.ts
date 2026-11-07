@@ -59,7 +59,6 @@ const ROUND_WINDOWS = 'round-windows';
 const INACTIVE_HINT_COLOR_RGBA = 'inactive-hint-color-rgba';
 const INACTIVE_HINT_COLOR_END_RGBA = 'inactive-hint-color-end-rgba';
 const INACTIVE_DIM = 'inactive-dim';
-const STACKING_WITH_MOUSE = 'stacking-with-mouse';
 const EDGE_TILING = 'edge-tiling';
 const FLOAT_RULES = 'float-rules';
 const FLOAT_ABOVE = 'float-above';
@@ -149,10 +148,6 @@ export class ExtensionSettings {
     /** Multiplier applied to border sizes, following the desktop's text scaling */
     text_scaling_factor(): number {
         return this.int ? this.int.get_double('text-scaling-factor') : 1;
-    }
-
-    stacking_with_mouse(): boolean {
-        return this.ext.get_boolean(STACKING_WITH_MOUSE);
     }
 
     /** (class pattern, title pattern) entries; empty patterns match anything */

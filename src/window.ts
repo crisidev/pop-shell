@@ -4,6 +4,7 @@ import * as Rect from './rectangle.js';
 import * as Tags from './tags.js';
 import * as utils from './utils.js';
 import type { Entity } from './ecs.js';
+import type { TilePlace } from './forest.js';
 import type { Ext } from './extension.js';
 import type { Rectangle } from './rectangle.js';
 import { Border } from './border.js';
@@ -12,7 +13,6 @@ import type { RoundedCorners } from './corners.js';
 
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
-import St from 'gi://St';
 
 /** How long a window may take to reach the rectangle pop-shell moved it to */
 const TARGET_TIMEOUT_US = 1_000_000;
@@ -24,11 +24,11 @@ export class ShellWindow {
     entity: Entity;
     meta: Meta.Window;
     ext: Ext;
-    stack: number | null = null;
     known_workspace: number;
     grab: boolean = false;
     ignore_detach: boolean = false;
-    was_attached_to?: [Entity, boolean | number];
+    // Where the window sat in the tree before it was minimized
+    was_attached_to?: TilePlace | null;
     destroying: boolean = false;
 
     // Awaiting reassignment after a display update
@@ -147,20 +147,6 @@ export class ShellWindow {
         }
 
         return out;
-    }
-
-    icon(_ext: Ext, size: number): any {
-        let icon = this.window_app.create_icon_texture(size);
-
-        if (!icon) {
-            icon = new St.Icon({
-                icon_name: 'applications-other',
-                icon_type: St.IconType.FULLCOLOR,
-                icon_size: size,
-            });
-        }
-
-        return icon;
     }
 
     is_maximized(): boolean {
@@ -428,7 +414,7 @@ export class ShellWindow {
         this.corners = null;
     }
 
-    /** Keeps the border directly above its window (and its stack tabs), so windows covering it cover the border too */
+    /** Keeps the border directly above its window, so windows covering it cover the border too */
     restack_border() {
         const border = this.border?.actor;
         const actor = this.meta.get_compositor_private();
@@ -438,12 +424,7 @@ export class ShellWindow {
         if (!parent || border.get_parent() !== parent) return;
 
         let above: Clutter.Actor = actor;
-        if (this.anim_clone && this.anim_clone.get_parent() === parent) {
-            above = this.anim_clone;
-        } else if (this.stack !== null) {
-            const tabs = this.ext.auto_tiler?.forest.stacks.get(this.stack)?.widgets?.tabs;
-            if (tabs && actor.get_next_sibling() === tabs) above = tabs;
-        }
+        if (this.anim_clone && this.anim_clone.get_parent() === parent) above = this.anim_clone;
 
         if (above.get_next_sibling() !== border) parent.set_child_above_sibling(border, above);
 
@@ -463,17 +444,11 @@ export class ShellWindow {
 
         // Maximized and zero-gap windows draw their border inside the frame.
         let border_size = this.is_max_screen() || this.is_snap_edge() ? 0 : this.ext.border_styles.active.width;
-        let tab_height = 0;
-
-        if (this.stack !== null && border_size !== 0 && !this.grab) {
-            const stack = this.ext.auto_tiler?.forest.stacks.get(this.stack);
-            if (stack) tab_height = stack.tabs_height;
-        }
 
         x -= border_size;
-        y -= tab_height + border_size;
+        y -= border_size;
         width += 2 * border_size;
-        height += tab_height + 2 * border_size;
+        height += 2 * border_size;
 
         const workspace = this.meta.get_workspace();
         const screen = workspace?.get_work_area_for_monitor(this.meta.get_monitor());

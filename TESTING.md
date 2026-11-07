@@ -44,17 +44,6 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Turn on auto-tiling. Windows automatically tile.
 - [ ] Disabling and enabling auto-tiling correctly handles minimized, maximized, fullscreen, floating, and non-floating windows (This test needs a better definition, steps, or to be separated out.)
 
-### Stacking
-
-- [ ] Windows can be moved into a stack.
-- [ ] Windows can be moved out of a stack.
-- [ ] Windows inside and outside of a stack can be swapped multiple times and in both directions.
-- [ ] Moving the last window out of a stack works as expected.
-- [ ] Stacks can be resized with the keyboard.
-- [ ] Stacks can be resized with the mouse.
-- [ ] Lock and unlock the screen-- stacks should still exist and windows should not have moved.
-- [ ] Full-screen an application within the stack, then quit the application-- the remaining tabs should be visible.
-
 ### Workspaces
 
 - [ ] Windows can be moved to another workspace with the keyboard
@@ -125,7 +114,6 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 ### Miscellaneous
 
 - [ ] Close all windows-- no icons should be active in the GNOME launcher.
-- [ ] Open a window, enable tiling, stack the window, move to a different workspace, and disable tiling. The window should not become visible on the empty workspace.
 - [ ] With tiling still disabled, minimize the single window. The active hint should go away.
 - [ ] Maximize a window, then open another app with the Activities overview. The newly-opened app should be visible and focused.
 - [ ] Maximize a window, then open another app with the launcher. The newly-opened app should be visible and focused.

@@ -57,7 +57,7 @@ measured between borders, so `gap-inner` and `gap-outer` are the space you see.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `active-hint` | `b` | `false` | Draw a border around the focused window |
-| `hint-color-rgba` | `s` | `'rgba(251, 184, 108, 1)'` | Border color of the focused window; the start (top-left) of its gradient. Stack tabs use it too |
+| `hint-color-rgba` | `s` | `'rgba(251, 184, 108, 1)'` | Border color of the focused window; the start (top-left) of its gradient |
 | `hint-color-end-rgba` **fork** | `s` | `''` | End (bottom-right) color of the focused border's diagonal gradient. Empty for a solid color |
 | `active-hint-border-width` **fork** | `u` | `3` | Border width, 1–10, for focused and unfocused windows |
 | `active-hint-border-radius` | `u` | `5` | Corner radius of borders, 0–30, and of rounded windows |
@@ -80,7 +80,6 @@ measured between borders, so `gap-inner` and `gap-outer` are the space you see.
 | `gap-outer` | `u` | `2` | Gap between tiled windows and the screen edges |
 | `smart-gaps` | `b` | `false` | No outer gap when a monitor's workspace holds a single tiled window |
 | `max-window-width` | `u` | `0` | Maximum width of tiled windows, centered in their tile. 0 disables it |
-| `stacking-with-mouse` | `b` | `true` | Dropping a window onto another one with the mouse stacks them |
 | `animate-tiling` **fork** | `b` | `false` | Ease tiled windows into their new place. Follows GNOME's animation setting |
 | `animation-duration` **fork** | `u` | `150` | Length of tiling animations, 50–1000 milliseconds |
 
@@ -147,7 +146,6 @@ Global:
 | `toggle-tiling` | `<Super>y` | Turn auto-tiling on or off |
 | `toggle-floating` | `<Super>g` | Float or tile the focused window |
 | `tile-orientation` | `<Super>o` | Toggle the orientation of the focused window's split |
-| `toggle-stacking-global` | `<Super>s` | Turn the focused window's place in the tree into a stack (tabs), or back |
 | `tile-move-left-global`, `-down`, `-up`, `-right` | `[]` | Move the focused tile in that direction, without entering management mode |
 
 The workspace shortcuts (`pop-switch-workspace-N`, `pop-move-workspace-N`, `rebalance-windows`) are in
@@ -161,7 +159,6 @@ move and resize with the mouse. In it:
 |---|---|---|
 | `tile-resize-left`, `-down`, `-up`, `-right` | `<Shift>` + arrow, keypad arrow, or `h` `j` `k` `l` | Shrink or grow the window, 64 px per press |
 | `management-orientation` | `o` | Toggle the split orientation |
-| `toggle-stacking` | `s` | Stack or unstack |
 | `tile-accept` | `Return`, `KP_Enter` | Leave the mode (resizes apply as you make them) |
 | `tile-reject` | `Escape` | Leave the mode |
 

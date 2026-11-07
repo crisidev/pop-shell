@@ -1,4 +1,3 @@
-export const OK = 1;
 export const ERR = 2;
 
 export type Result<T, E> = Ok<T> | Err<E>;
