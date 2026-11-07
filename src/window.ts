@@ -24,7 +24,6 @@ export class ShellWindow {
     entity: Entity;
     meta: Meta.Window;
     ext: Ext;
-    known_workspace: number;
     grab: boolean = false;
     ignore_detach: boolean = false;
     // Where the window sat in the tree before it was minimized
@@ -83,8 +82,6 @@ export class ShellWindow {
         this.entity = entity;
         this.meta = window;
         this.ext = ext;
-
-        this.known_workspace = this.workspace_id();
 
         // Float fullscreen windows by default, such as Kodi.
         if (this.meta.is_fullscreen()) {

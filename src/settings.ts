@@ -9,16 +9,12 @@ interface Settings extends GObject.Object {
     set_boolean(key: string, value: boolean): void;
 
     get_uint(key: string): number;
-    set_uint(key: string, value: number): void;
 
     get_double(key: string): number;
 
     get_value(key: string): any;
-    set_value(key: string, value: any): boolean;
-    set_double(key: string, value: number): void;
 
     get_string(key: string): string;
-    set_string(key: string, value: string): void;
 
     bind(key: string, object: GObject.Object, property: string, flags: any): void;
 }
@@ -74,7 +70,6 @@ const TILE_BY_DEFAULT = 'tile-by-default';
 const HINT_COLOR_RGBA = 'hint-color-rgba';
 const HINT_COLOR_END_RGBA = 'hint-color-end-rgba';
 const DEFAULT_RGBA_COLOR = 'rgba(251, 184, 108, 1)'; //pop-orange
-const LOG_LEVEL = 'log-level';
 const MOUSE_CURSOR_FOLLOWS_ACTIVE_WINDOW = 'mouse-cursor-follows-active-window';
 const MOUSE_CURSOR_FOCUS_LOCATION = 'mouse-cursor-focus-location';
 const MAX_WINDOW_WIDTH = 'max-window-width';
@@ -229,10 +224,6 @@ export class ExtensionSettings {
 
     workspaces_only_on_primary(): boolean {
         return this.mutter ? this.mutter.get_boolean('workspaces-only-on-primary') : false;
-    }
-
-    log_level(): number {
-        return this.ext.get_uint(LOG_LEVEL);
     }
 
     mouse_cursor_follows_active_window(): boolean {

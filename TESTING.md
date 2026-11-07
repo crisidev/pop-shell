@@ -23,11 +23,13 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Super direction keys changes focus in the correct direction
 - [ ] Windows moved with the keyboard tile into place
 - [ ] Windows moved with the mouse tile into place
-- [ ] Windows swap with the keyboard (test with different size windows)
-- [ ] Windows can be resized with the keyboard (Test resizing four windows above, below, right, and left to ensure shortcut consistency)
+- [ ] Tiles move with `tile-move-*-global` (test with different size windows)
+- [ ] Windows can be resized with the keyboard in window management mode (Test resizing four windows above, below, right, and left to ensure shortcut consistency)
 - [ ] Windows can be resized with the mouse
 - [ ] Minimizing a window detaches it from the tree and re-tiles remaining windows
-- [ ] Unminimizing a window re-tiles the window
+- [ ] Unminimizing a window returns it to the slot and split it had
+- [ ] Closing a window in a 2x2 layout keeps the remaining split direction
+- [ ] Dropping a window onto a sibling with the mouse splits it on the side nearest the pointer
 - [ ] Maximizing with the keyboard (`Super` `M`) covers tiled windows
 - [ ] Unmaximizing with keyboard (`Super` `M`) re-tiles into place
 - [ ] Maximizing with the mouse covers tiled windows
@@ -38,7 +40,7 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] VIM shortcuts work as direction keys
 - [ ] `Super` `O` changes window orientation
 - [ ] `Super` `G` floats and then re-tiles a window
-- [ ] Float a window with `Super` `G`. It should be movable and resizeable in window management mode with keyboard keys
+- [ ] Window management mode doesn't open on a floating window
 - [ ] `Super` `Q` Closes a window
 - [ ] Turn off auto-tiling. New windows launch floating.
 - [ ] Turn on auto-tiling. Windows automatically tile.
@@ -56,59 +58,32 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 
 ### Displays
 
-- [ ] Windows move across displays in adjustment mode with direction keys
+- [ ] Windows move across displays with `tile-move-*-global`
 - [ ] Windows move across displays with the mouse
 - [ ] Changing the primary display moves the top bar. Window heights adjust on all monitors for the new position.
 - [ ] Unplug a display - windows from the display retile on a new workspace on the remaining display
 - [ ] Plug an additional display into a laptop - windows and workspaces don't changes
 - [ ] NOTE: Add vertical monitor layout test
 
-### Launcher
+### Float rules
 
-- [ ] All windows on all workspaces appear on launch
-- [ ] Choosing an app on another workspace moves workspaces and focus to that app
-- [ ] Launching an application works
-- [ ] Typing text and then removing it will re-show those windows
-- [ ] Search works for applications and windows
-- [ ] Search works for GNOME settings panels
-- [ ] Search for "Extensions". There should be only one entry.
-- [ ] The overlay hint correctly highlights the selected window
-- [ ] Open windows are sorted above applications (e.g. "web browser")
-- [ ] t: executes a command in a terminal
-- [ ] : executes a command in sh
-- [ ] = calculates an equation
-- [ ] Search results are as expected:
-    - `cal` returns Calendar and Calculator before Color
-    - `pops` returns Popsicle first
-    - `shop` returns the Pop!_Shop first
-
-### Window Titles
-
-- [ ] Disabling window titles using global (Pop Shell) option works for Shell Shortcuts, LibreOffice, etc.
-- [ ] Disabling window titles in Firefox works (Check debian and flatpak packages)
-
-### Floating Exceptions
-
-- [ ] Add a window to floating exceptions-- it should float immediately.
+- [ ] Add a window to `float-rules`-- it should float immediately.
 - [ ] Close and re-open the window-- it should float when opened.
-- [ ] Add an app to floating exceptions-- it should float immediately.
-- [ ] Close and re-open the app-- it should float when opened.
+
+### Notifications
+
+- [ ] An app that wants attention (e.g. a terminal bell on another workspace) doesn't show an "is ready" notification.
 
 ## With Tiling Disabled
 
 ### Tiling
 
 - [ ] Super direction keys changes focus in the correct direction
-- [ ] Windows can be moved with the keyboard
-- [ ] Windows can be moved with the mouse
-- [ ] Windows swap with the keyboard (test with different size windows)
-- [ ] Windows can be resized with the keyboard
-- [ ] Windows can be resized with the mouse
+- [ ] Windows can be moved and resized with the mouse
 - [ ] Windows can be half-tiled left and right with `Ctrl``Super``left`/`right`
 
 ### Displays
 
-- [ ] Windows move across displays in adjustment mode with directions keys
 - [ ] Windows move across displays with the mouse
 
 ### Miscellaneous
@@ -116,4 +91,3 @@ Tasks for a tester to verify when approving a patch. Use complex window layouts 
 - [ ] Close all windows-- no icons should be active in the GNOME launcher.
 - [ ] With tiling still disabled, minimize the single window. The active hint should go away.
 - [ ] Maximize a window, then open another app with the Activities overview. The newly-opened app should be visible and focused.
-- [ ] Maximize a window, then open another app with the launcher. The newly-opened app should be visible and focused.
