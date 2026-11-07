@@ -132,7 +132,6 @@ export class Stack {
     active_id: number = 0;
 
     prev_active: null | Entity = null;
-    prev_active_id: number = 0;
 
     tabs: Array<Tab> = new Array();
 
@@ -200,12 +199,6 @@ export class Stack {
         return c.entity;
     }
 
-    activate_prev() {
-        if (this.prev_active) {
-            this.activate(this.prev_active);
-        }
-    }
-
     /** Activates the tab of this entity */
     activate(entity: Entity) {
         const permitted = this.permitted_to_show();
@@ -219,7 +212,6 @@ export class Stack {
 
         if (!Ecs.entity_eq(entity, this.active)) {
             this.prev_active = this.active;
-            this.prev_active_id = this.active_id;
         }
 
         this.active_connect(win.meta, entity);
@@ -469,7 +461,6 @@ export class Stack {
 
         if (this.prev_active && Ecs.entity_eq(entity, this.prev_active)) {
             this.prev_active = null;
-            this.prev_active_id = 0;
         }
 
         let idx = 0;

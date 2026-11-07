@@ -90,32 +90,6 @@ export class Fork {
         return this.is_horizontal() ? this.area.height : this.area.width;
     }
 
-    find_branch(entity: Entity): Node | null {
-        const locate = (branch: Node): Node | null => {
-            switch (branch.inner.kind) {
-                case 2:
-                    if (Ecs.entity_eq(branch.inner.entity, entity)) {
-                        return branch;
-                    }
-
-                    break;
-                case 3:
-                    for (const e of branch.inner.entities) {
-                        if (Ecs.entity_eq(e, entity)) {
-                            return branch;
-                        }
-                    }
-            }
-
-            return null;
-        };
-
-        const node = locate(this.left);
-        if (node) return node;
-
-        return this.right ? locate(this.right) : null;
-    }
-
     /** If this fork has a horizontal orientation */
     is_horizontal(): boolean {
         return Lib.Orientation.HORIZONTAL == this.orientation;

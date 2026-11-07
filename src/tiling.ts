@@ -1,10 +1,8 @@
-// import * as Ecs from './ecs.js';
 import * as GrabOp from './grab_op.js';
 import * as Lib from './lib.js';
 import * as Log from './log.js';
 import * as Node from './node.js';
 import * as Rect from './rectangle.js';
-import * as Tags from './tags.js';
 import * as window from './window.js';
 import * as geom from './geom.js';
 import * as exec from './executor.js';
@@ -17,7 +15,6 @@ import { AutoTiler } from './auto_tiler.js';
 import { Fork } from './fork.js';
 
 import Meta from 'gi://Meta';
-import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 const { ShellWindow } = window;
 
 export enum Direction {
@@ -35,25 +32,15 @@ export class Tiler {
     moving: boolean = false;
     resizing_window: boolean = false;
 
-    private swap_window: Entity | null = null;
-
     queue: exec.ChannelExecutor<() => void> = new exec.ChannelExecutor();
 
     constructor(ext: Ext) {
         this.keybindings = {
             'management-orientation': () => this.toggle_orientation(ext),
-            'tile-move-left': () => this.move_left(ext),
-            'tile-move-down': () => this.move_down(ext),
-            'tile-move-up': () => this.move_up(ext),
-            'tile-move-right': () => this.move_right(ext),
             'tile-resize-left': () => this.resize(ext, Direction.Left),
             'tile-resize-down': () => this.resize(ext, Direction.Down),
             'tile-resize-up': () => this.resize(ext, Direction.Up),
             'tile-resize-right': () => this.resize(ext, Direction.Right),
-            'tile-swap-left': () => this.swap_left(ext),
-            'tile-swap-down': () => this.swap_down(ext),
-            'tile-swap-up': () => this.swap_up(ext),
-            'tile-swap-right': () => this.swap_right(ext),
             'tile-accept': () => this.accept(ext),
             'tile-reject': () => this.exit(ext),
             'toggle-stacking': () => this.toggle_stacking(ext),
@@ -72,90 +59,6 @@ export class Tiler {
         ext.auto_tiler?.toggle_stacking(ext);
         const win = ext.focus_window();
         if (win) this.overlay_watch(ext, win);
-    }
-
-    rect(ext: Ext, monitor: Rectangle): Rectangle | null {
-        if (!ext.overlay.visible) return null;
-
-        const columns = Math.floor(monitor.width / ext.column_size);
-        const rows = Math.floor(monitor.height / ext.row_size);
-
-        return monitor_rect(monitor, columns, rows);
-    }
-
-    change(overlay: Rectangular, rect: Rectangle, dx: number, dy: number, dw: number, dh: number): Tiler {
-        let changed = new Rect.Rectangle([
-            overlay.x + dx * rect.width,
-            overlay.y + dy * rect.height,
-            overlay.width + dw * rect.width,
-            overlay.height + dh * rect.height,
-        ]);
-
-        // Align to grid
-        changed.x = Lib.round_increment(changed.x - rect.x, rect.width) + rect.x;
-        changed.y = Lib.round_increment(changed.y - rect.y, rect.height) + rect.y;
-        changed.width = Lib.round_increment(changed.width, rect.width);
-        changed.height = Lib.round_increment(changed.height, rect.height);
-
-        // Ensure that width is not too small
-        if (changed.width < rect.width) {
-            changed.width = rect.width;
-        }
-
-        // Ensure that height is not too small
-        if (changed.height < rect.height) {
-            changed.height = rect.height;
-        }
-
-        // Check that corrected rectangle fits on monitors
-        let monitors = tile_monitors(changed);
-
-        // Do not use change if there are no matching displays
-        if (monitors.length == 0) return this;
-
-        let min_x: number | null = null;
-        let min_y: number | null = null;
-        let max_x: number | null = null;
-        let max_y: number | null = null;
-
-        for (const monitor of monitors) {
-            if (min_x === null || monitor.x < min_x) {
-                min_x = monitor.x;
-            }
-            if (min_y === null || monitor.y < min_y) {
-                min_y = monitor.y;
-            }
-            if (max_x === null || monitor.x + monitor.width > max_x) {
-                max_x = monitor.x + monitor.width;
-            }
-            if (max_y === null || monitor.y + monitor.height < max_y) {
-                max_y = monitor.y + monitor.height;
-            }
-        }
-
-        if (
-            // Do not use change if maxima cannot be found
-            min_x === null ||
-            min_y === null ||
-            max_x === null ||
-            max_y === null ||
-            // Prevent moving too far left
-            changed.x < min_x ||
-            // Prevent moving too far right
-            changed.x + changed.width > max_x ||
-            // Prevent moving too far up
-            changed.y < min_y ||
-            // Prevent moving too far down
-            changed.y + changed.height > max_y
-        )
-            return this;
-
-        overlay.x = changed.x;
-        overlay.y = changed.y;
-        overlay.width = changed.width;
-        overlay.height = changed.height;
-
-        return this;
     }
 
     unstack_from_fork(
@@ -193,10 +96,6 @@ export class Tiler {
     move(
         ext: Ext,
         window: Entity | null,
-        x: number,
-        y: number,
-        w: number,
-        h: number,
         direction: Direction,
         focus: () => window.ShellWindow | number | null,
     ) {
@@ -232,11 +131,6 @@ export class Tiler {
                     this.moving = false;
                     place_pointer();
                 }
-            });
-        } else {
-            this.swap_window = null;
-            this.rect_by_active_area(ext, (_monitor, rect) => {
-                this.change(ext.overlay, rect, x, y, w, h).change(ext.overlay, rect, 0, 0, 0, 0);
             });
         }
     }
@@ -481,20 +375,6 @@ export class Tiler {
         });
     }
 
-    rect_by_active_area(ext: Ext, callback: (monitor: Rectangle, area: Rectangle) => void) {
-        if (this.window) {
-            const monitor_id = ext.monitors.get(this.window);
-            if (monitor_id) {
-                const monitor = ext.monitor_work_area(monitor_id[0]);
-                let rect = this.rect(ext, monitor);
-
-                if (rect) {
-                    callback(monitor, rect);
-                }
-            }
-        }
-    }
-
     resize_auto(ext: Ext, direction: Direction) {
         let mov1: [number, number, number, number], mov2: [number, number, number, number];
 
@@ -613,10 +493,6 @@ export class Tiler {
         this.move(
             ext,
             window ?? this.window,
-            -1,
-            0,
-            0,
-            0,
             Direction.Left,
             move_window_or_monitor(ext, ext.focus_selector.left, Meta.DisplayDirection.LEFT),
         );
@@ -626,10 +502,6 @@ export class Tiler {
         this.move(
             ext,
             window ?? this.window,
-            0,
-            1,
-            0,
-            0,
             Direction.Down,
             move_window_or_monitor(ext, ext.focus_selector.down, Meta.DisplayDirection.DOWN),
         );
@@ -639,10 +511,6 @@ export class Tiler {
         this.move(
             ext,
             window ?? this.window,
-            0,
-            -1,
-            0,
-            0,
             Direction.Up,
             move_window_or_monitor(ext, ext.focus_selector.up, Meta.DisplayDirection.UP),
         );
@@ -652,99 +520,24 @@ export class Tiler {
         this.move(
             ext,
             window ?? this.window,
-            1,
-            0,
-            0,
-            0,
             Direction.Right,
             move_window_or_monitor(ext, ext.focus_selector.right, Meta.DisplayDirection.RIGHT),
         );
     }
 
+    /** Resizes the tiled window in management mode */
     resize(ext: Ext, direction: Direction) {
-        if (!this.window) return;
+        if (!this.window || !ext.auto_tiler) return;
         this.resizing_window = true;
-
-        if (ext.auto_tiler && !ext.contains_tag(this.window, Tags.Floating)) {
-            this.resize_auto(ext, direction);
-        } else {
-            let array: [number, number, number, number];
-            switch (direction) {
-                case Direction.Down:
-                    array = [0, 0, 0, 1];
-                    break;
-                case Direction.Left:
-                    array = [0, 0, -1, 0];
-                    break;
-                case Direction.Up:
-                    array = [0, 0, 0, -1];
-                    break;
-                default:
-                    array = [0, 0, 1, 0];
-            }
-
-            const [x, y, w, h] = array;
-
-            this.swap_window = null;
-            this.rect_by_active_area(ext, (_monitor, rect) => {
-                this.change(ext.overlay, rect, x, y, w, h).change(ext.overlay, rect, 0, 0, 0, 0);
-            });
-        }
-
+        this.resize_auto(ext, direction);
         this.resizing_window = false;
     }
 
-    swap(ext: Ext, selector: window.ShellWindow | null) {
-        if (selector) {
-            ext.set_overlay(selector.rect());
-            this.swap_window = selector.entity;
-        }
-    }
-
-    swap_left(ext: Ext) {
-        if (this.swap_window) {
-            ext.windows.with(this.swap_window, (window) => {
-                this.swap(ext, ext.focus_selector.left(ext, window));
-            });
-        } else {
-            this.swap(ext, ext.focus_selector.left(ext, null));
-        }
-    }
-
-    swap_down(ext: Ext) {
-        if (this.swap_window) {
-            ext.windows.with(this.swap_window, (window) => {
-                this.swap(ext, ext.focus_selector.down(ext, window));
-            });
-        } else {
-            this.swap(ext, ext.focus_selector.down(ext, null));
-        }
-    }
-
-    swap_up(ext: Ext) {
-        if (this.swap_window) {
-            ext.windows.with(this.swap_window, (window) => {
-                this.swap(ext, ext.focus_selector.up(ext, window));
-            });
-        } else {
-            this.swap(ext, ext.focus_selector.up(ext, null));
-        }
-    }
-
-    swap_right(ext: Ext) {
-        if (this.swap_window) {
-            ext.windows.with(this.swap_window, (window) => {
-                this.swap(ext, ext.focus_selector.right(ext, window));
-            });
-        } else {
-            this.swap(ext, ext.focus_selector.right(ext, null));
-        }
-    }
-
+    /** Enters management mode, which resizes tiled windows (floating windows have none) */
     enter(ext: Ext) {
         if (!this.window) {
             const win = ext.focus_window();
-            if (!win) return;
+            if (!win || !ext.auto_tiler || !win.is_tilable(ext)) return;
 
             this.window = win.entity;
 
@@ -756,54 +549,12 @@ export class Tiler {
             ext.set_overlay(win.rect());
             ext.overlay.visible = true;
 
-            if (!ext.auto_tiler || ext.contains_tag(win.entity, Tags.Floating)) {
-                // Make sure overlay is valid
-                this.rect_by_active_area(ext, (_monitor, rect) => {
-                    this.change(ext.overlay, rect, 0, 0, 0, 0);
-                });
-            }
-
             ext.keybindings.disable(ext.keybindings.window_focus).enable(this.keybindings);
         }
     }
 
+    /** Leaves management mode; resizes already apply as they are made */
     accept(ext: Ext) {
-        if (this.window) {
-            const meta = ext.windows.get(this.window);
-            if (meta) {
-                let tree_swapped = false;
-
-                if (this.swap_window) {
-                    const meta_swap = ext.windows.get(this.swap_window);
-                    if (meta_swap) {
-                        if (ext.auto_tiler) {
-                            tree_swapped = true;
-                            ext.auto_tiler.attach_swap(ext, this.swap_window, this.window);
-                        } else {
-                            ext.size_signals_block(meta_swap);
-
-                            meta_swap.move(ext, meta.rect(), () => {
-                                ext.size_signals_unblock(meta_swap);
-                            });
-                        }
-
-                        ext.register_fn(() => meta.activate(true));
-                    }
-                }
-
-                if (!tree_swapped) {
-                    ext.size_signals_block(meta);
-                    const meta_entity = this.window;
-                    meta.move(ext, ext.overlay, () => {
-                        ext.size_signals_unblock(meta);
-                        ext.add_tag(meta_entity, Tags.Tiled);
-                    });
-                }
-            }
-        }
-
-        this.swap_window = null;
-
         this.exit(ext);
     }
 
@@ -821,19 +572,6 @@ export class Tiler {
         }
     }
 
-    snap(ext: Ext, win: window.ShellWindow) {
-        let mon_geom = ext.monitor_work_area(win.meta.get_monitor());
-        if (mon_geom) {
-            let rect = win.rect();
-            const columns = Math.floor(mon_geom.width / ext.column_size);
-            const rows = Math.floor(mon_geom.height / ext.row_size);
-            this.change(rect, monitor_rect(mon_geom, columns, rows), 0, 0, 0, 0);
-
-            win.move(ext, rect);
-
-            ext.snapped.insert(win.entity, true);
-        }
-    }
 }
 
 export function locate_monitor(
@@ -886,23 +624,6 @@ export function locate_monitor(
     return next ? [next[0], next[2]] : null;
 }
 
-function monitor_rect(monitor: Rectangle, columns: number, rows: number): Rectangle {
-    let tile_width = monitor.width / columns;
-    let tile_height = monitor.height / rows;
-
-    // Anything above 21:9 is considered ultrawide
-    if (monitor.width * 9 >= monitor.height * 21) {
-        tile_width /= 2;
-    }
-
-    // Anything below 9:21 is probably a rotated ultrawide
-    if (monitor.height * 9 >= monitor.width * 21) {
-        tile_height /= 2;
-    }
-
-    return new Rect.Rectangle([monitor.x, monitor.y, tile_width, tile_height]);
-}
-
 function move_window_or_monitor(
     ext: Ext,
     method: (ext: Ext, window: window.ShellWindow | null) => window.ShellWindow | null,
@@ -930,21 +651,4 @@ function move_window_or_monitor(
 
         return next_window;
     };
-}
-
-function tile_monitors(rect: Rectangle): Array<Rectangle> {
-    let total_size = (a: Rectangle, b: Rectangle): number => a.width * a.height - b.width * b.height;
-
-    let workspace = global.workspace_manager.get_active_workspace();
-    return Main.layoutManager.monitors
-        .map((_monitor: Rectangle, i: number) => workspace.get_work_area_for_monitor(i))
-        .filter((monitor: Rectangle) => {
-            return (
-                rect.x + rect.width > monitor.x &&
-                rect.y + rect.height > monitor.y &&
-                rect.x < monitor.x + monitor.width &&
-                rect.y < monitor.y + monitor.height
-            );
-        })
-        .sort(total_size);
 }

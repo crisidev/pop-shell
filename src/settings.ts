@@ -1,4 +1,3 @@
-// const Me = imports.misc.extensionUtils.getCurrentExtension();
 import Gio from 'gi://Gio';
 import Gdk from 'gi://Gdk';
 import { get_current_path } from './paths.js';
@@ -27,11 +26,7 @@ interface Settings extends GObject.Object {
 function settings_new_id(schema_id: string): Settings | null {
     try {
         return new Gio.Settings({ schema_id });
-    } catch (why) {
-        if (schema_id !== 'org.gnome.shell.extensions.user-theme') {
-            // global.log(`failed to get settings for ${schema_id}: ${why}`);
-        }
-
+    } catch (_why) {
         return null;
     }
 }
@@ -65,7 +60,6 @@ const INACTIVE_HINT_COLOR_RGBA = 'inactive-hint-color-rgba';
 const INACTIVE_HINT_COLOR_END_RGBA = 'inactive-hint-color-end-rgba';
 const INACTIVE_DIM = 'inactive-dim';
 const STACKING_WITH_MOUSE = 'stacking-with-mouse';
-const COLUMN_SIZE = 'column-size';
 const EDGE_TILING = 'edge-tiling';
 const FLOAT_RULES = 'float-rules';
 const FLOAT_ABOVE = 'float-above';
@@ -76,15 +70,12 @@ const WORKSPACE_BACK_AND_FORTH = 'workspace-back-and-forth';
 const STARTUP_WORKSPACE = 'startup-workspace';
 const GAP_INNER = 'gap-inner';
 const GAP_OUTER = 'gap-outer';
-const ROW_SIZE = 'row-size';
 const SMART_GAPS = 'smart-gaps';
-const SNAP_TO_GRID = 'snap-to-grid';
 const TILE_BY_DEFAULT = 'tile-by-default';
 const HINT_COLOR_RGBA = 'hint-color-rgba';
 const HINT_COLOR_END_RGBA = 'hint-color-end-rgba';
 const DEFAULT_RGBA_COLOR = 'rgba(251, 184, 108, 1)'; //pop-orange
 const LOG_LEVEL = 'log-level';
-const SHOW_SKIPTASKBAR = 'show-skip-taskbar';
 const MOUSE_CURSOR_FOLLOWS_ACTIVE_WINDOW = 'mouse-cursor-follows-active-window';
 const MOUSE_CURSOR_FOCUS_LOCATION = 'mouse-cursor-focus-location';
 const MAX_WINDOW_WIDTH = 'max-window-width';
@@ -164,14 +155,6 @@ export class ExtensionSettings {
         return this.ext.get_boolean(STACKING_WITH_MOUSE);
     }
 
-    column_size(): number {
-        return this.ext.get_uint(COLUMN_SIZE);
-    }
-
-    dynamic_workspaces(): boolean {
-        return this.mutter ? this.mutter.get_boolean('dynamic-workspaces') : false;
-    }
-
     /** (class pattern, title pattern) entries; empty patterns match anything */
     float_rules(): Array<[string, string]> {
         return this.ext.get_value(FLOAT_RULES).deep_unpack();
@@ -241,16 +224,8 @@ export class ExtensionSettings {
         return this.a11y?.get_boolean('high-contrast') || this.theme().toLowerCase() === 'highcontrast';
     }
 
-    row_size(): number {
-        return this.ext.get_uint(ROW_SIZE);
-    }
-
     smart_gaps(): boolean {
         return this.ext.get_boolean(SMART_GAPS);
-    }
-
-    snap_to_grid(): boolean {
-        return this.ext.get_boolean(SNAP_TO_GRID);
     }
 
     tile_by_default(): boolean {
@@ -263,14 +238,6 @@ export class ExtensionSettings {
 
     log_level(): number {
         return this.ext.get_uint(LOG_LEVEL);
-    }
-
-    perf_threshold(): number {
-        return this.ext.get_uint('perf-threshold');
-    }
-
-    show_skiptaskbar(): boolean {
-        return this.ext.get_boolean(SHOW_SKIPTASKBAR);
     }
 
     mouse_cursor_follows_active_window(): boolean {

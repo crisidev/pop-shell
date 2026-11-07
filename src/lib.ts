@@ -12,20 +12,8 @@ export enum Orientation {
     VERTICAL = 1,
 }
 
-export function nth_rev<T>(array: Array<T>, nth: number): T | null {
-    return array[array.length - nth - 1];
-}
-
 export function ok<T, X>(input: T | null, func: (a: T) => X | null): X | null {
     return input ? func(input) : null;
-}
-
-export function ok_or_else<A, B>(input: A | null, ok_func: (input: A) => B, or_func: () => B): B {
-    return input ? ok_func(input) : or_func();
-}
-
-export function or_else<T>(input: T | null, func: () => T | null): T | null {
-    return input ? input : func();
 }
 
 export function bench<T>(name: string, callback: () => T): T {
@@ -36,12 +24,6 @@ export function bench<T>(name: string, callback: () => T): T {
     log.info(`bench ${name}: ${end - start} ms elapsed`);
 
     return value;
-}
-
-export function current_monitor(): Rectangle {
-    return rectangle.Rectangle.from_meta(
-        global.display.get_monitor_geometry(global.display.get_current_monitor()) as Rectangular,
-    );
 }
 
 // Fetch rectangle that represents the cursor
@@ -68,11 +50,6 @@ export function modifier_pressed(): boolean {
         Clutter.ModifierType.SUPER_MASK |
         Clutter.ModifierType.MOD4_MASK;
     return (mods & modifiers) !== 0;
-}
-
-export function dbg<T>(value: T): T {
-    log.debug(String(value));
-    return value;
 }
 
 /// Missing from the Clutter API is an Actor children iterator
@@ -117,10 +94,6 @@ export function is_move_op(op: number): boolean {
     return !is_resize_op(op);
 }
 
-export function orientation_as_str(value: number): string {
-    return value == 0 ? 'Orientation::Horizontal' : 'Orientation::Vertical';
-}
-
 /// Useful in the event that you want to reuse an actor in the future
 export function recursive_remove_children(actor: Clutter.Actor) {
     for (const child of get_children(actor)) {
@@ -128,16 +101,6 @@ export function recursive_remove_children(actor: Clutter.Actor) {
     }
 
     actor.remove_all_children();
-}
-
-export function round_increment(value: number, increment: number): number {
-    return Math.round(value / increment) * increment;
-}
-
-export function round_to(n: number, digits: number): number {
-    let m = Math.pow(10, digits);
-    n = parseFloat((n * m).toFixed(11));
-    return Math.round(n) / m;
 }
 
 export function separator(): any {

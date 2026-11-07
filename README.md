@@ -32,8 +32,6 @@ home-manager. Every option is documented in **[OPTIONS.md](OPTIONS.md)**.
   focus the window under the pointer.
 - **Monitors**: followed by connector, so tiling trees survive renumbering when docking, and windows of
   an unplugged monitor move to the primary.
-- **Profiling**: `perf-threshold` logs slow handlers with their call trees, and traces focus changes and
-  pointer warps.
 
 ### Fixed
 
@@ -44,9 +42,15 @@ home-manager. Every option is documented in **[OPTIONS.md](OPTIONS.md)**.
 
 ### Removed
 
-- The launcher: use any launcher you like.
+- The launcher, and the D-Bus methods only it used (`ClearNotifications` stays).
 - The preferences window and the top bar menu: every option is a GSettings key.
 - The GTK color picker and floating exceptions dialogs: colors and float rules are settings.
+- The floating-mode grid (`snap-to-grid`, `column-size`, `row-size`), and moving and swapping windows
+  inside window management mode, which now only resizes tiles. Tiles move with
+  `tile-move-*-global`.
+- Pop Shell's move-to-monitor and move-to-workspace up/down shortcuts: GNOME's own do the same.
+- Showing windows that skip the taskbar (minimized to tray) in the overview and Alt+Tab.
+- The System76 scheduler integration.
 - Window title hiding and other X11-only code, and support for GNOME before 49.
 
 ## Install
@@ -82,11 +86,11 @@ See [OPTIONS.md](OPTIONS.md) for every key, home-manager examples and the keyboa
 ## Use
 
 - `Super` + arrows (or `h` `j` `k` `l`): focus the window in that direction.
-- `Super` + `Return`: window management mode. Arrows move, `Shift` + arrows resize, `Ctrl` + arrows
-  pick a window to swap with, `Return` applies, `Escape` cancels.
+- `Super` + `Return`: window management mode, to resize the focused tile with `Shift` + arrows;
+  `Return` or `Escape` leaves it. Bind `tile-move-*-global` to move tiles around.
 - `Super` + `y`: toggle auto-tiling. `Super` + `g`: float or tile a window. `Super` + `o`: toggle a
   split's orientation. `Super` + `s`: stack windows into tabs.
-- `Super` + `Shift` + arrows: move the window to another workspace or monitor.
+- `pop-switch-workspace-N` and `pop-move-workspace-N` switch workspace and move windows to one.
 
 ## Develop
 

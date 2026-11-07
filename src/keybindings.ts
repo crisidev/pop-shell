@@ -1,6 +1,5 @@
 import type { Ext } from './extension.js';
 import { WORKSPACE_KEYS } from './workspaces.js';
-import * as perf from './perf.js';
 
 import { wm } from 'resource:///org/gnome/shell/ui/main.js';
 import Shell from 'gi://Shell';
@@ -54,18 +53,6 @@ export class Keybindings {
             'tile-move-up-global': () => ext.tiler.move_up(ext, ext.focus_window()?.entity),
 
             'tile-move-right-global': () => ext.tiler.move_right(ext, ext.focus_window()?.entity),
-
-            'pop-monitor-left': () => ext.move_monitor(Meta.DisplayDirection.LEFT),
-
-            'pop-monitor-right': () => ext.move_monitor(Meta.DisplayDirection.RIGHT),
-
-            'pop-monitor-up': () => ext.move_monitor(Meta.DisplayDirection.UP),
-
-            'pop-monitor-down': () => ext.move_monitor(Meta.DisplayDirection.DOWN),
-
-            'pop-workspace-up': () => ext.move_workspace(Meta.DisplayDirection.UP),
-
-            'pop-workspace-down': () => ext.move_workspace(Meta.DisplayDirection.DOWN),
         };
     }
 
@@ -76,7 +63,7 @@ export class Keybindings {
                 this.ext.settings.ext,
                 Meta.KeyBindingFlags.NONE,
                 Shell.ActionMode.NORMAL,
-                perf.wrap(`key:${name}`, keybindings[name]),
+                keybindings[name],
             );
         }
 

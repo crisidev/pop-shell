@@ -29,71 +29,6 @@ export class AutoTiler {
         this.attached = attached;
     }
 
-    /** Swap window associations in the auto-tiler
-     *
-     * Call this when a window has swapped positions with another, so that we
-     * may update the associations in the auto-tiler world.
-     */
-    attach_swap(ext: Ext, a: Entity, b: Entity) {
-        const a_ent = this.attached.get(a),
-            b_ent = this.attached.get(b);
-
-        let a_win = ext.windows.get(a),
-            b_win = ext.windows.get(b);
-
-        if (!a_ent || !b_ent || !a_win || !b_win) return;
-
-        const a_fork = this.forest.forks.get(a_ent),
-            b_fork = this.forest.forks.get(b_ent);
-
-        if (!a_fork || !b_fork) return;
-
-        const a_stack = a_win.stack,
-            b_stack = b_win.stack;
-
-        if (ext.auto_tiler) {
-            if (a_win.stack !== null) {
-                const stack = ext.auto_tiler.forest.stacks.get(a_win.stack);
-                if (stack) {
-                    a = stack.active;
-                    a_win = ext.windows.get(a);
-                    if (!a_win) return;
-
-                    stack.deactivate(a_win);
-                }
-            }
-
-            if (b_win.stack !== null) {
-                const stack = ext.auto_tiler.forest.stacks.get(b_win.stack);
-                if (stack) {
-                    b = stack.active;
-                    b_win = ext.windows.get(b);
-                    if (!b_win) return;
-
-                    stack.deactivate(b_win);
-                }
-            }
-        }
-
-        const a_fn = a_fork.replace_window(ext, a_win, b_win);
-        this.forest.on_attach(a_ent, b);
-
-        const b_fn = b_fork.replace_window(ext, b_win, a_win);
-        this.forest.on_attach(b_ent, a);
-
-        if (a_fn) a_fn();
-        if (b_fn) b_fn();
-
-        a_win.stack = b_stack;
-        b_win.stack = a_stack;
-
-        a_win.meta.get_compositor_private()?.show();
-        b_win.meta.get_compositor_private()?.show();
-
-        this.tile(ext, a_fork, a_fork.area);
-        this.tile(ext, b_fork, b_fork.area);
-    }
-
     update_toplevel(ext: Ext, fork: Fork, monitor: number, smart_gaps: boolean) {
         let rect = ext.monitor_work_area(monitor);
 
@@ -254,48 +189,6 @@ export class AutoTiler {
 
             ext.windows.with(win, (info) => (info.ignore_detach = false));
         });
-    }
-
-    /** Swaps the location of two windows if the dropped window was dropped onto its sibling */
-    dropped_on_sibling(ext: Ext, win: Entity, swap: boolean = true): boolean {
-        const fork_entity = this.attached.get(win);
-
-        if (fork_entity) {
-            const cursor = lib.cursor_rect();
-            const fork = this.forest.forks.get(fork_entity);
-
-            if (fork) {
-                if (fork.left.inner.kind === 2 && fork.right && fork.right.inner.kind === 2) {
-                    if (fork.left.is_window(win)) {
-                        const sibling = ext.windows.get(fork.right.inner.entity);
-                        if (sibling && sibling.rect().contains(cursor)) {
-                            if (swap) {
-                                fork.left.inner.entity = fork.right.inner.entity;
-                                fork.right.inner.entity = win;
-
-                                this.tile(ext, fork, fork.area);
-                            }
-
-                            return true;
-                        }
-                    } else if (fork.right.is_window(win)) {
-                        const sibling = ext.windows.get(fork.left.inner.entity);
-                        if (sibling && sibling.rect().contains(cursor)) {
-                            if (swap) {
-                                fork.right.inner.entity = fork.left.inner.entity;
-                                fork.left.inner.entity = win;
-
-                                this.tile(ext, fork, fork.area);
-                            }
-
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-
-        return false;
     }
 
     find_stack(entity: Entity): null | [Fork, node.Node, boolean] {

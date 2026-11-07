@@ -48,24 +48,6 @@ export const DEFAULT_FLOAT_RULES: Array<FloatRule> = [
     { class: 'gjs' },
 ];
 
-export interface WindowRule {
-    class?: string;
-    title?: string;
-    disabled?: boolean;
-}
-
-/**
- * These windows will skip showing in Overview, Thumbnails or SwitcherList
- * And any rule here should be added on the DEFAULT_RULES above
- */
-export const SKIPTASKBAR_EXCEPTIONS: Array<WindowRule> = [
-    { class: 'Conky' },
-    { class: 'gjs' },
-    { class: 'Guake' },
-    { class: 'Com.github.amezin.ddterm' },
-    { class: 'plank' },
-];
-
 export interface FloatRule {
     class?: string;
     title?: string;
@@ -104,12 +86,6 @@ export class Config {
     /** Compiled float rules, rebuilt when the setting changes */
     #compiled_float: Array<CompiledRule> | null = null;
 
-    /**
-     * List of Windows with skip taskbar true but still hidden in Overview,
-     * Switchers, Workspace Thumbnails
-     */
-    skiptaskbarhidden: Array<WindowRule> = [];
-
     /** Logs window details on focus of window */
     log_on_focus: boolean = false;
 
@@ -133,31 +109,6 @@ export class Config {
         return false;
     }
 
-    skiptaskbar_shall_hide(meta_window: any) {
-        let wmclass = meta_window.get_wm_class();
-        let wmtitle = meta_window.get_title();
-
-        if (!meta_window.is_skip_taskbar()) return false;
-
-        for (const rule of this.skiptaskbarhidden.concat(SKIPTASKBAR_EXCEPTIONS)) {
-            if (rule.class) {
-                if (!new RegExp(rule.class, 'i').test(wmclass)) {
-                    continue;
-                }
-            }
-
-            if (rule.title) {
-                if (!new RegExp(rule.title, 'i').test(wmtitle)) {
-                    continue;
-                }
-            }
-
-            return rule.disabled ? false : true;
-        }
-
-        return false;
-    }
-
     /** Reads config.json, if there is one; a missing file leaves the defaults */
     reload() {
         try {
@@ -167,7 +118,6 @@ export class Config {
             const [, buffer] = file.load_contents(null);
             const conf = JSON.parse(new TextDecoder().decode(buffer));
             this.log_on_focus = conf.log_on_focus === true;
-            this.skiptaskbarhidden = Array.isArray(conf.skiptaskbarhidden) ? conf.skiptaskbarhidden : [];
         } catch (why) {
             log(`pop-shell: error loading ${CONF_FILE}: ${why}`);
         }

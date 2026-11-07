@@ -54,20 +54,6 @@ set_keybindings() {
     dconf write ${KEYS_GNOME_WM}/maximize "@as []"
     # Restore window: disable <Super>Down
     dconf write ${KEYS_GNOME_WM}/unmaximize "@as []"
-    # Move to monitor up: disable <Super><Shift>Up
-    dconf write ${KEYS_GNOME_WM}/move-to-monitor-up "@as []"
-    # Move to monitor down: disable <Super><Shift>Down
-    dconf write ${KEYS_GNOME_WM}/move-to-monitor-down "@as []"
-
-    # Super + direction keys, move window left and right monitors, or up and down workspaces
-    # Move window one monitor to the left
-    dconf write ${KEYS_GNOME_WM}/move-to-monitor-left "@as []"
-    # Move window one workspace down
-    dconf write ${KEYS_GNOME_WM}/move-to-workspace-down "@as []"
-    # Move window one workspace up
-    dconf write ${KEYS_GNOME_WM}/move-to-workspace-up "@as []"
-    # Move window one monitor to the right
-    dconf write ${KEYS_GNOME_WM}/move-to-monitor-right "@as []"
 
     # Super + Ctrl + direction keys, change workspaces, move focus between monitors
     # Move to workspace below

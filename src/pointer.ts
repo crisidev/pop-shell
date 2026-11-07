@@ -1,5 +1,4 @@
 import * as focus from './focus.js';
-import * as perf from './perf.js';
 
 import type { Ext } from './extension.js';
 
@@ -37,7 +36,6 @@ function inside(rect: Rectangular, x: number, y: number): boolean {
 }
 
 function warp(x: number, y: number) {
-    perf.trace(`warp ${Math.round(x)},${Math.round(y)}`);
     global.stage.get_context().get_backend().get_default_seat().warp_pointer(Math.round(x), Math.round(y));
 }
 
@@ -283,18 +281,6 @@ export class Pointer {
 
     private warp_onto(win: Meta.Window) {
         const frame = this.rect_of(win);
-        if (perf.enabled()) {
-            const r = (q: Rectangular) => `${q.x},${q.y},${q.width}x${q.height}`;
-            const all = global
-                .get_window_actors()
-                .map((a: any) => {
-                    const m = a.get_meta_window();
-                    const sw = this.ext.get_window(m);
-                    return `${m.get_pid() % 1000}${m === win ? '>' : ''}${m.has_focus() ? '*' : ''} f=${r(m.get_frame_rect())} t=${sw ? r(sw.settled_rect()) : '-'}${sw?.settling() ? ' S' : ''}`;
-                })
-                .join(' | ');
-            perf.trace(`warp onto ${win.get_pid() % 1000} rect=${r(frame)} :: ${all}`);
-        }
 
         const last = this.ext.settings.mouse_cursor_warp_to_last_position() ? this.positions.get(win) : undefined;
         if (last && last.x < frame.width && last.y < frame.height) {
@@ -350,18 +336,17 @@ export class Pointer {
         this.cancel_dwell();
         if (!this.fix_focus || !win || win === global.display.get_focus_window()) return;
 
-        this.dwell = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FOCUS_DWELL_MS, perf.wrap('timeout:dwell', () => {
+        this.dwell = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FOCUS_DWELL_MS, () => {
             this.dwell = null;
             const target = this.hover;
             const focused = this.ext.focus_window();
             // A float on top keeps focus until a click (see Ext.float_keeps_focus).
             if (focused?.made_above && this.ext.settings.float_above()) return GLib.SOURCE_REMOVE;
             if (target && target === win && target !== global.display.get_focus_window()) {
-                perf.trace(`dwell focuses ${perf.describe(target)}`);
                 target.focus(global.get_current_time());
             }
             return GLib.SOURCE_REMOVE;
-        }));
+        });
     }
 
     private cancel_dwell() {

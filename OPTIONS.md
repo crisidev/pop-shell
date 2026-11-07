@@ -81,10 +81,6 @@ measured between borders, so `gap-inner` and `gap-outer` are the space you see.
 | `smart-gaps` | `b` | `false` | No outer gap when a monitor's workspace holds a single tiled window |
 | `max-window-width` | `u` | `0` | Maximum width of tiled windows, centered in their tile. 0 disables it |
 | `stacking-with-mouse` | `b` | `true` | Dropping a window onto another one with the mouse stacks them |
-| `snap-to-grid` | `b` | `false` | In floating mode, snap windows to the grid when moved or resized with the mouse |
-| `column-size` | `u` | `64` | Column width of the floating mode grid |
-| `row-size` | `u` | `64` | Row height of the floating mode grid |
-| `show-skip-taskbar` | `b` | `true` | Manage windows that skip the taskbar (minimized to tray) |
 | `animate-tiling` **fork** | `b` | `false` | Ease tiled windows into their new place. Follows GNOME's animation setting |
 | `animation-duration` **fork** | `u` | `150` | Length of tiling animations, 50–1000 milliseconds |
 
@@ -153,32 +149,28 @@ Global:
 | `tile-orientation` | `<Super>o` | Toggle the orientation of the focused window's split |
 | `toggle-stacking-global` | `<Super>s` | Turn the focused window's place in the tree into a stack (tabs), or back |
 | `tile-move-left-global`, `-down`, `-up`, `-right` | `[]` | Move the focused tile in that direction, without entering management mode |
-| `pop-workspace-up`, `-down` | `<Super><Shift>` + up/down, keypad, `k`/`j` | Move the focused window to the workspace above or below |
-| `pop-monitor-left`, `-right`, `-up`, `-down` | `<Super><Shift>` + left/right, `<Super><Shift><Primary>` + up/down, with keypad and `h` `j` `k` `l` variants | Move the focused window to the monitor in that direction |
 
 The workspace shortcuts (`pop-switch-workspace-N`, `pop-move-workspace-N`, `rebalance-windows`) are in
-[Workspaces and monitors](#workspaces-and-monitors).
+[Workspaces and monitors](#workspaces-and-monitors). Moving a window to the next workspace or monitor
+uses GNOME's own shortcuts (`move-to-workspace-*`, `move-to-monitor-*`).
 
-In window management mode:
+Window management mode resizes the focused tiled window; it doesn't open on floating windows, which you
+move and resize with the mouse. In it:
 
 | Key | Default | Action |
 |---|---|---|
-| `tile-move-left`, `-down`, `-up`, `-right` | arrow, keypad arrow, or `h` `j` `k` `l` | Move the window, or the floating mode overlay |
-| `tile-resize-left`, `-down`, `-up`, `-right` | `<Shift>` + the same | Resize |
-| `tile-swap-left`, `-down`, `-up`, `-right` | `<Primary>` + the same | Pick a window to swap with |
+| `tile-resize-left`, `-down`, `-up`, `-right` | `<Shift>` + arrow, keypad arrow, or `h` `j` `k` `l` | Shrink or grow the window, 64 px per press |
 | `management-orientation` | `o` | Toggle the split orientation |
 | `toggle-stacking` | `s` | Stack or unstack |
-| `tile-accept` | `Return`, `KP_Enter` | Apply and leave the mode |
-| `tile-reject` | `Escape` | Cancel and leave the mode |
+| `tile-accept` | `Return`, `KP_Enter` | Leave the mode (resizes apply as you make them) |
+| `tile-reject` | `Escape` | Leave the mode |
 
 ## Debugging
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `log-level` | `u` | `0` | Logging to the shell's journal: 0 off, 1 errors, 2 warnings, 3 info, 4 debug |
-| `perf-threshold` **fork** | `u` | `0` | Log every keybinding, signal handler and queued event taking at least this many milliseconds, with a call tree of pop-shell methods and the GNOME calls under them, plus a summary every 10 seconds. Focus changes and pointer warps are traced too, with the code path that caused them. 0 disables it |
 
 Read the logs with `journalctl -o cat -f "$(which gnome-shell)" | grep pop-shell`.
 
-`~/.config/pop-shell/config.json` holds two more debugging options: `log_on_focus` (log every focused
-window) and `skiptaskbarhidden` (rules for windows that skip the taskbar and stay unmanaged).
+`~/.config/pop-shell/config.json` can set `log_on_focus` to log every focused window.

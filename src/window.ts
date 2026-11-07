@@ -1,13 +1,11 @@
 import GLib from 'gi://GLib';
 import * as log from './log.js';
-import * as perf from './perf.js';
 import * as Rect from './rectangle.js';
 import * as Tags from './tags.js';
 import * as utils from './utils.js';
 import type { Entity } from './ecs.js';
 import type { Ext } from './extension.js';
 import type { Rectangle } from './rectangle.js';
-import * as scheduler from './scheduler.js';
 import { Border } from './border.js';
 import { CORNERS_EFFECT, RoundedCornersEffect } from './corners.js';
 import type { RoundedCorners } from './corners.js';
@@ -29,7 +27,6 @@ export class ShellWindow {
     stack: number | null = null;
     known_workspace: number;
     grab: boolean = false;
-    activate_after_move: boolean = false;
     ignore_detach: boolean = false;
     was_attached_to?: [Entity, boolean | number];
     destroying: boolean = false;
@@ -174,8 +171,6 @@ export class ShellWindow {
      * Window is maximized, 0 gapped or smart gapped
      */
     is_max_screen(): boolean {
-        // log.debug(`title: ${this.meta.get_title()}`);
-        // log.debug(`max: ${this.is_maximized()}, 0-gap: ${this.ext.settings.gap_inner() === 0}, smart: ${this.smart_gapped}`);
         return this.is_maximized() || this.ext.settings.gap_inner() === 0 || this.smart_gapped;
     }
 
@@ -263,7 +258,7 @@ export class ShellWindow {
 
             ext.movements.insert(this.entity, clone);
 
-            ext.register({ tag: 2, window: this, kind: { tag: 1 }, origin: perf.enabled() ? perf.path() : undefined });
+            ext.register({ tag: 2, window: this, kind: { tag: 1 } });
             if (on_complete) ext.register_fn(on_complete);
         }
     }
@@ -457,10 +452,6 @@ export class ShellWindow {
         if (glow && glow.get_parent() === parent && actor.get_previous_sibling() !== glow) {
             parent.set_child_below_sibling(glow, actor);
         }
-    }
-
-    hide_border() {
-        this.border?.hide();
     }
 
     update_border_layout() {
@@ -669,8 +660,6 @@ export function activate(ext: Ext, move_mouse: boolean, win: Meta.Window) {
 
         const workspace = win.get_workspace();
         if (!workspace) return;
-
-        scheduler.setForeground(win);
 
         win.unminimize();
         workspace.activate_with_focus(win, global.get_current_time());

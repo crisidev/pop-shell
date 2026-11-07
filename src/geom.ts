@@ -57,10 +57,6 @@ export function directional_distance(
     return distance(fn_a(a), fn_b(b));
 }
 
-export function window_distance(win_a: Meta.Window, win_b: Meta.Window) {
-    return directional_distance(win_a.get_frame_rect(), win_b.get_frame_rect(), center, center);
-}
-
 export function upward_distance(win_a: Meta.Window, win_b: Meta.Window) {
     return directional_distance(win_a.get_frame_rect(), win_b.get_frame_rect(), south, north);
 }

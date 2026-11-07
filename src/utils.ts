@@ -3,17 +3,8 @@ import * as error from './error.js';
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
-import GObject from 'gi://GObject';
 const { Ok, Err } = result;
 const { Error } = error;
-
-export function block_signal(object: GObject.Object, signal: SignalID) {
-    GObject.signal_handler_block(object, signal);
-}
-
-export function unblock_signal(object: GObject.Object, signal: SignalID) {
-    GObject.signal_handler_unblock(object, signal);
-}
 
 export function read_to_string(path: string): result.Result<string, error.Error> {
     const file = Gio.File.new_for_path(path);
@@ -53,7 +44,6 @@ export function is_dark(color: string): boolean {
     if (color.indexOf('rgb') >= 0) {
         // starts with parsed value from Gdk.RGBA
         color = color.replace('rgba', 'rgb').replace('rgb(', '').replace(')', ''); // make it 255, 255, 255, 1
-        // log.debug(`util color: ${color}`);
         let colors = color.split(',');
         r = parseInt(colors[0].trim());
         g = parseInt(colors[1].trim());
