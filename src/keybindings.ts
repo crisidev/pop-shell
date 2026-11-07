@@ -1,5 +1,6 @@
 import type { Ext } from './extension.js';
 import { WORKSPACE_KEYS } from './workspaces.js';
+import * as perf from './perf.js';
 
 import { wm } from 'resource:///org/gnome/shell/ui/main.js';
 import Shell from 'gi://Shell';
@@ -75,7 +76,7 @@ export class Keybindings {
                 this.ext.settings.ext,
                 Meta.KeyBindingFlags.NONE,
                 Shell.ActionMode.NORMAL,
-                keybindings[name],
+                perf.wrap(`key:${name}`, keybindings[name]),
             );
         }
 

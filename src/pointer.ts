@@ -1,4 +1,5 @@
 import * as focus from './focus.js';
+import * as perf from './perf.js';
 
 import type { Ext } from './extension.js';
 
@@ -14,6 +15,15 @@ const MIN_WINDOW_SIZE = 10;
 /** How long the pointer must rest on a window before the slow-mouse fix focuses it */
 const FOCUS_DWELL_MS = 50;
 
+/**
+ * A warp waits for the windows pop-shell is moving to reach their places
+ * (checked this often, for at most this long): until then their frames
+ * have stale sizes, and the pointer could land on, and sloppy focus pick,
+ * a neighbor that hasn't shrunk yet.
+ */
+const SETTLE_POLL_MS = 16;
+const SETTLE_MAX_MS = 500;
+
 /** Inset from the frame edge for the corner focus locations */
 const CORNER_INSET = 8;
 
@@ -27,6 +37,7 @@ function inside(rect: Rectangular, x: number, y: number): boolean {
 }
 
 function warp(x: number, y: number) {
+    perf.trace(`warp ${Math.round(x)},${Math.round(y)}`);
     global.stage.get_context().get_backend().get_default_seat().warp_pointer(Math.round(x), Math.round(y));
 }
 
@@ -71,6 +82,10 @@ export class Pointer {
     private fix_focus: boolean = false;
     private dwell: number | null = null;
 
+    /** Warp waiting for moved windows to settle, then for the next painted frame */
+    private settle: number | null = null;
+    private paint_signal: number | null = null;
+
     constructor(ext: Ext) {
         this.ext = ext;
     }
@@ -84,6 +99,7 @@ export class Pointer {
         if (this.prefs_signal !== null) this.wm_prefs.disconnect(this.prefs_signal);
         this.prefs_signal = null;
         this.stop_motion();
+        this.cancel_settle();
         this.positions.clear();
         this.suppressed = null;
         this.focused = null;
@@ -167,12 +183,61 @@ export class Pointer {
     follow(win: Meta.Window, previous: Meta.Window | null = this.focused) {
         if (!this.may_warp(win)) return;
         this.save_position(previous, win);
-        this.warp_onto(win);
+        this.when_settled(() => {
+            if (this.may_warp(win)) this.warp_onto(win);
+        });
     }
 
     /** Moves the pointer onto `win` unconditionally (setting permitting), e.g. after swapping tiles */
     place_on(win: Meta.Window) {
-        if (this.ext.settings.mouse_cursor_follows_active_window()) this.warp_onto(win);
+        if (!this.ext.settings.mouse_cursor_follows_active_window()) return;
+        this.when_settled(() => {
+            if (win.get_compositor_private()) this.warp_onto(win);
+        });
+    }
+
+    /**
+     * Runs `fn` once no window is still on its way to where pop-shell moved
+     * it, and a frame showing them in place has been painted; a newer call
+     * replaces it.
+     *
+     * The painted frame matters: mutter finds the window under the pointer
+     * from the last painted frame, so a warp right after a move hands sloppy
+     * focus to whatever window used to be at that spot, and following that
+     * focus warps the pointer back, again and again until a frame is drawn.
+     */
+    private when_settled(fn: () => void) {
+        this.cancel_settle();
+
+        const start = GLib.get_monotonic_time();
+        const after_paint = () => {
+            this.paint_signal = global.stage.connect('after-paint', () => {
+                this.cancel_settle();
+                fn();
+            });
+            global.stage.queue_redraw();
+        };
+
+        if (!this.ext.windows_settling()) {
+            after_paint();
+            return;
+        }
+
+        this.settle = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SETTLE_POLL_MS, () => {
+            if (this.ext.windows_settling() && GLib.get_monotonic_time() - start < SETTLE_MAX_MS * 1000) {
+                return GLib.SOURCE_CONTINUE;
+            }
+            this.settle = null;
+            after_paint();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    private cancel_settle() {
+        if (this.settle !== null) GLib.source_remove(this.settle);
+        this.settle = null;
+        if (this.paint_signal !== null) global.stage.disconnect(this.paint_signal);
+        this.paint_signal = null;
     }
 
     private may_warp(win: Meta.Window): boolean {
@@ -186,7 +251,7 @@ export class Pointer {
         if (Main.overview.visible || Main.modalCount > 0) return false;
         if (global.display.get_focus_window() !== win || !win.get_compositor_private()) return false;
 
-        const frame = win.get_frame_rect();
+        const frame = this.rect_of(win);
         if (frame.width < MIN_WINDOW_SIZE && frame.height < MIN_WINDOW_SIZE) return false;
 
         const [x, y] = global.get_pointer();
@@ -211,8 +276,25 @@ export class Pointer {
         if (inside(frame, x, y)) this.positions.set(previous, { x: x - frame.x, y: y - frame.y });
     }
 
+    /** Where `win` is, or is about to be when pop-shell is still moving it */
+    private rect_of(win: Meta.Window): Rectangular {
+        return this.ext.get_window(win)?.settled_rect() ?? win.get_frame_rect();
+    }
+
     private warp_onto(win: Meta.Window) {
-        const frame = win.get_frame_rect();
+        const frame = this.rect_of(win);
+        if (perf.enabled()) {
+            const r = (q: Rectangular) => `${q.x},${q.y},${q.width}x${q.height}`;
+            const all = global
+                .get_window_actors()
+                .map((a: any) => {
+                    const m = a.get_meta_window();
+                    const sw = this.ext.get_window(m);
+                    return `${m.get_pid() % 1000}${m === win ? '>' : ''}${m.has_focus() ? '*' : ''} f=${r(m.get_frame_rect())} t=${sw ? r(sw.settled_rect()) : '-'}${sw?.settling() ? ' S' : ''}`;
+                })
+                .join(' | ');
+            perf.trace(`warp onto ${win.get_pid() % 1000} rect=${r(frame)} :: ${all}`);
+        }
 
         const last = this.ext.settings.mouse_cursor_warp_to_last_position() ? this.positions.get(win) : undefined;
         if (last && last.x < frame.width && last.y < frame.height) {
@@ -268,17 +350,18 @@ export class Pointer {
         this.cancel_dwell();
         if (!this.fix_focus || !win || win === global.display.get_focus_window()) return;
 
-        this.dwell = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FOCUS_DWELL_MS, () => {
+        this.dwell = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FOCUS_DWELL_MS, perf.wrap('timeout:dwell', () => {
             this.dwell = null;
             const target = this.hover;
             const focused = this.ext.focus_window();
             // A float on top keeps focus until a click (see Ext.float_keeps_focus).
             if (focused?.made_above && this.ext.settings.float_above()) return GLib.SOURCE_REMOVE;
             if (target && target === win && target !== global.display.get_focus_window()) {
+                perf.trace(`dwell focuses ${perf.describe(target)}`);
                 target.focus(global.get_current_time());
             }
             return GLib.SOURCE_REMOVE;
-        });
+        }));
     }
 
     private cancel_dwell() {

@@ -53,6 +53,7 @@ export class TileAnimator {
             from.height > 0 &&
             !same(frame, rect);
 
+        window.set_target(rect);
         meta.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
         meta.move_frame(true, rect.x, rect.y);
 

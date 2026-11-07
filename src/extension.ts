@@ -29,6 +29,7 @@ import { TileAnimator } from './animation.js';
 import { PanelHint } from './panel_hint.js';
 import { NotificationDestroyedReason } from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as scheduler from './scheduler.js';
+import * as perf from './perf.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import type { Entity } from './ecs.js';
 import type { ExtEvent } from './events.js';
@@ -338,11 +339,19 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     /** Registers a generic callback to be executed in the event loop. */
     register_fn(callback: () => void, name?: string) {
-        this.register({ tag: 1, callback, name });
+        this.register({ tag: 1, callback, name, origin: perf.enabled() ? perf.path() : undefined });
     }
 
     /** Executes an event on the system */
     run(event: ExtEvent) {
+        if (perf.enabled()) {
+            const origin = event.tag === 1 || event.tag === 2 ? event.origin : undefined;
+            perf.span(event_label(event), () => perf.with_origin(origin, () => this.run_(event)));
+        }
+        else this.run_(event);
+    }
+
+    private run_(event: ExtEvent) {
         switch (event.tag) {
             /** Callback Event */
             case 1:
@@ -488,7 +497,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
     /// Connects a callback signal to a GObject, and records the signal.
     connect(object: GObject.Object, property: string, callback: (...args: any) => boolean | void): SignalID {
-        const signal = object.connect(property, callback);
+        const signal = object.connect(property, perf.wrap(`signal:${property}`, callback));
         const entry = this.signals.get(object);
         if (entry) {
             entry.push(signal);
@@ -500,9 +509,12 @@ export class Ext extends Ecs.System<ExtEvent> {
     }
 
     connect_meta(win: Window.ShellWindow, signal: string, callback: (...args: any[]) => void): number {
-        const id = win.meta.connect(signal, () => {
-            if (win.actor_exists()) callback();
-        });
+        const id = win.meta.connect(
+            signal,
+            perf.wrap(`signal:${signal}`, () => {
+                if (win.actor_exists()) callback();
+            }),
+        );
 
         this.window_signals.get_or(win.entity, () => new Array()).push(id);
 
@@ -970,6 +982,14 @@ export class Ext extends Ecs.System<ExtEvent> {
                 window.prev_rect = null;
             }
         });
+    }
+
+    /** True while a window pop-shell moved has yet to reach its new place */
+    windows_settling(): boolean {
+        for (const win of this.windows.values()) {
+            if (win.settling()) return true;
+        }
+        return false;
     }
 
     /** Refreshes every window's border, at most once per frame */
@@ -2066,6 +2086,9 @@ export class Ext extends Ecs.System<ExtEvent> {
 
         this.connect(this.settings.ext, 'changed', (_s, key: string) => {
             switch (key) {
+                case 'perf-threshold':
+                    perf.configure(this.settings.perf_threshold());
+                    break;
                 case 'active-hint':
                     if (indicator) indicator.toggle_active.setToggleState(this.settings.active_hint());
 
@@ -2185,6 +2208,7 @@ export class Ext extends Ecs.System<ExtEvent> {
 
                 const previous = this.focused_meta;
                 this.focused_meta = global.display.get_focus_window();
+                perf.trace(`focus ${perf.describe(previous)} -> ${perf.describe(this.focused_meta)} click=${by_click} kbd=${by_keyboard}`);
 
                 // Disallow refocus if a modal window is active
                 if (Main.modalCount !== 0) {
@@ -2976,6 +3000,9 @@ export default class PopShellExtension extends Extension {
             return;
         }
 
+        register_perf_targets();
+        perf.configure(ext.settings.perf_threshold());
+
         ext.injections_add();
         ext.signals_attach();
         ext.pointer.enable();
@@ -3008,6 +3035,7 @@ export default class PopShellExtension extends Extension {
             }
 
             delete globalThis.popShellExtension;
+            perf.configure(0);
             ext.injections_remove();
             ext.signals_remove();
             ext.exit_modes();
@@ -3036,6 +3064,126 @@ export default class PopShellExtension extends Extension {
 
         enable_window_attention_handler();
     }
+}
+
+/** Names a queued event for perf-threshold: callbacks by name or by their first line of code */
+function event_label(event: ExtEvent): string {
+    switch (event.tag) {
+        case 1:
+            return `run:${event.name ?? event.callback.toString().replace(/\s+/g, ' ').slice(0, 60)}`;
+        case 2:
+            return event.kind.tag === 1 ? 'run:move' : `run:${WindowEvent[event.kind.event]}`;
+        case 3:
+            return 'run:create';
+        case 4:
+            return `run:${GlobalEvent[event.event]}`;
+    }
+}
+
+/** The methods perf-threshold times, grouped by class */
+function register_perf_targets() {
+    perf.register([
+        [
+            Ext.prototype,
+            'Ext',
+            [
+                'on_focused',
+                'unmaximize_workspace',
+                'update_borders',
+                'restack',
+                'activate_window',
+                'focus_left',
+                'focus_right',
+                'focus_up',
+                'focus_down',
+                'stack_select',
+                'on_active_workspace_changed',
+                'on_workspace_changed',
+                'on_grab_start',
+                'on_grab_end_',
+                'on_window_create',
+                'on_destroy',
+                'on_minimize',
+                'on_maximize',
+                'on_float_focus',
+                'float_keeps_focus',
+                'sync_all_float_above',
+                'move_monitor',
+                'move_workspace',
+                'workspace_window_move',
+                'snap_windows',
+                'update_display_configuration',
+                'connect_window',
+            ],
+        ],
+        [
+            Tiling.Tiler.prototype,
+            'Tiler',
+            [
+                'move_left',
+                'move_down',
+                'move_up',
+                'move_right',
+                'swap',
+                'swap_left',
+                'swap_down',
+                'swap_up',
+                'swap_right',
+                'resize',
+                'resize_auto',
+                'enter',
+                'accept',
+                'exit',
+                'snap',
+            ],
+        ],
+        [
+            auto_tiler.AutoTiler.prototype,
+            'AutoTiler',
+            [
+                'attach_swap',
+                'attach_to_monitor',
+                'attach_to_workspace',
+                'auto_tile',
+                'detach_window',
+                'on_drop',
+                'reflow',
+                'tile',
+                'toggle_floating',
+                'toggle_orientation',
+                'toggle_stacking',
+                'update_stack',
+                'update_toplevel',
+            ],
+        ],
+        [Forest.Forest.prototype, 'Forest', ['arrange', 'tile', 'measure', 'attach_fork', 'detach', 'resize']],
+        [Fork.prototype, 'Fork', ['measure']],
+        [
+            stack.Stack.prototype,
+            'Stack',
+            ['activate', 'restyle', 'restack', 'reposition', 'update_positions', 'set_visible', 'reset_visibility'],
+        ],
+        [
+            Window.ShellWindow.prototype,
+            'ShellWindow',
+            [
+                'move',
+                'activate',
+                'swap',
+                'is_tilable',
+                'refresh_border',
+                'refresh_corners',
+                'restack_border',
+                'update_border_layout',
+                'sync_float_above',
+                'place_floating',
+            ],
+        ],
+        [Pointer.prototype, 'Pointer', ['on_focus_changed', 'follow', 'warp_onto', 'on_motion']],
+        [Workspaces.prototype, 'Workspaces', ['switch_to', 'move_to', 'apply', 'rebalance', 'on_active_workspace_changed']],
+        [TileAnimator.prototype, 'TileAnimator', ['move', 'finish', 'finish_all']],
+        [Focus.FocusSelector.prototype, 'FocusSelector', ['left', 'right', 'up', 'down']],
+    ]);
 }
 
 const handler = windowAttentionHandler;

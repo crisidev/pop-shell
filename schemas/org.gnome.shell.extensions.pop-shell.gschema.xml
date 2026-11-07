@@ -490,6 +490,10 @@
                 4 - DEBUG
             </summary>
         </key>
+        <key type="u" name="perf-threshold">
+            <default>0</default>
+            <summary>Log pop-shell entry points that take at least this many milliseconds, with their call tree; 0 disables</summary>
+        </key>
 
     </schema>
 </schemalist>

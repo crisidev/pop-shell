@@ -10,6 +10,8 @@ export interface GenericCallback {
     tag: 1;
     callback: () => void;
     name?: string;
+    /** perf: what queued it */
+    origin?: string;
 }
 
 /** Event that handles a registered window */
@@ -17,6 +19,8 @@ export interface ManagedWindow {
     tag: 2;
     window: Window.ShellWindow;
     kind: Movement | Basic;
+    /** perf: what queued it */
+    origin?: string;
 }
 
 /** Event that registers a new window */

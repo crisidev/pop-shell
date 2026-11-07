@@ -1,4 +1,6 @@
+import GLib from 'gi://GLib';
 import * as log from './log.js';
+import * as perf from './perf.js';
 import * as Rect from './rectangle.js';
 import * as Tags from './tags.js';
 import * as utils from './utils.js';
@@ -13,6 +15,9 @@ import type { RoundedCorners } from './corners.js';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
+
+/** How long a window may take to reach the rectangle pop-shell moved it to */
+const TARGET_TIMEOUT_US = 1_000_000;
 
 
 export var window_tracker = Shell.WindowTracker.get_default();
@@ -46,6 +51,14 @@ export class ShellWindow {
 
     // True while a tiling animation moves a clone of this window
     animating: boolean = false;
+
+    /**
+     * Rectangle pop-shell last moved this window to, until the window
+     * reaches it. Wayland clients resize asynchronously, so for a while the
+     * frame has its new position but still its old size.
+     */
+    private target: Rectangular | null = null;
+    private target_time: number = 0;
 
     // Corner rounding effect on the window actor, created on first use
     private corners: RoundedCorners | null = null;
@@ -236,7 +249,7 @@ export class ShellWindow {
 
             ext.movements.insert(this.entity, clone);
 
-            ext.register({ tag: 2, window: this, kind: { tag: 1 } });
+            ext.register({ tag: 2, window: this, kind: { tag: 1 }, origin: perf.enabled() ? perf.path() : undefined });
             if (on_complete) ext.register_fn(on_complete);
         }
     }
@@ -519,6 +532,41 @@ export class ShellWindow {
         if (x !== frame.x || y !== frame.y || width !== frame.width || height !== frame.height) {
             this.meta.move_resize_frame(true, x, y, width, height);
         }
+    }
+
+    /** Records that pop-shell is moving this window to `rect` */
+    set_target(rect: Rectangular) {
+        this.target = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        this.target_time = GLib.get_monotonic_time();
+    }
+
+    /**
+     * Where the window is, or is about to be: the rectangle pop-shell moved
+     * it to while the client has yet to reach it (for at most a second),
+     * and its frame otherwise.
+     */
+    settled_rect(): Rectangular {
+        const frame = this.meta.get_frame_rect();
+        const target = this.target;
+        if (!target) return frame;
+
+        const reached =
+            frame.x === target.x &&
+            frame.y === target.y &&
+            frame.width === target.width &&
+            frame.height === target.height;
+        if (reached || GLib.get_monotonic_time() - this.target_time > TARGET_TIMEOUT_US) {
+            this.target = null;
+            return frame;
+        }
+
+        return target;
+    }
+
+    /** True while the window is still on its way to where pop-shell moved it */
+    settling(): boolean {
+        this.settled_rect();
+        return this.target !== null;
     }
 
     private window_changed() {

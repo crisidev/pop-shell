@@ -262,6 +262,10 @@ export class ExtensionSettings {
         return this.ext.get_uint(LOG_LEVEL);
     }
 
+    perf_threshold(): number {
+        return this.ext.get_uint('perf-threshold');
+    }
+
     show_skiptaskbar(): boolean {
         return this.ext.get_boolean(SHOW_SKIPTASKBAR);
     }
