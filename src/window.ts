@@ -8,7 +8,7 @@ import type { TilePlace } from './forest.js';
 import type { Ext } from './extension.js';
 import type { Rectangle } from './rectangle.js';
 import { Border } from './border.js';
-import { CORNERS_EFFECT, RoundedCornersEffect } from './corners.js';
+import { CORNERS_EFFECT, new_rounded_corners } from './corners.js';
 import type { RoundedCorners } from './corners.js';
 
 import Meta from 'gi://Meta';
@@ -387,7 +387,7 @@ export class ShellWindow {
         }
 
         if (!this.corners) {
-            this.corners = new RoundedCornersEffect();
+            this.corners = new_rounded_corners();
             actor.add_effect_with_name(CORNERS_EFFECT, this.corners);
         } else if (!this.corners.enabled) {
             this.corners.set_enabled(true);

@@ -8,7 +8,7 @@ A fork of [Pop Shell](https://github.com/pop-os/shell), System76's GNOME Shell e
 i3-style tiling to GNOME: keyboard-driven focus and movement, an auto-tiling tree, and
 floating windows that coexist with it.
 
-This fork targets **GNOME 49 and 50 on Wayland** only (branch `master_noble`). It adds window hints and
+This fork targets **GNOME 49, 50 and 51 on Wayland** only (branch `master_noble`). It adds window hints and
 effects, workspace and float rules, and pointer handling, removes what Wayland-only GNOME no longer
 needs, and is configured entirely through GSettings, so a whole setup can be declared in dconf or
 home-manager. Every option is documented in **[OPTIONS.md](OPTIONS.md)**.
@@ -38,7 +38,7 @@ home-manager. Every option is documented in **[OPTIONS.md](OPTIONS.md)**.
 - Focus bouncing between windows (and the dimming blinking with it) when moving, opening or closing
   tiles: pointer warps wait for windows to settle and be drawn before sloppy focus can react.
 - Windows on all workspaces no longer wobble and steal focus on secondary monitors.
-- GNOME 49 and 50 APIs (Mutter 17 and 18).
+- GNOME 49, 50 and 51 APIs (Mutter 17, 18 and 19).
 
 ### Removed
 
