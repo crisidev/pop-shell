@@ -52,6 +52,14 @@ export class ShellWindow {
     // True while a tiling animation moves a clone of this window
     animating: boolean = false;
 
+    /**
+     * The clone a tiling animation moves in this window's place, and the
+     * offsets of the window's frame inside it (client-side shadows), so the
+     * border and dim overlay can follow the clone instead of vanishing.
+     */
+    private anim_clone: Clutter.Actor | null = null;
+    private anim_margins = { x: 0, y: 0, width: 0, height: 0 };
+
     // Set when keyboard focus lands here, until the next border pass flashes the glow
     private flash_requested: boolean = false;
 
@@ -301,7 +309,6 @@ export class ShellWindow {
 
         return (
             actor.visible &&
-            !this.animating &&
             actor.get_parent() === this.border.actor.get_parent() &&
             !this.meta.minimized &&
             !this.meta.is_fullscreen() &&
@@ -436,7 +443,9 @@ export class ShellWindow {
         if (!parent || border.get_parent() !== parent) return;
 
         let above: Clutter.Actor = actor;
-        if (this.stack !== null) {
+        if (this.anim_clone && this.anim_clone.get_parent() === parent) {
+            above = this.anim_clone;
+        } else if (this.stack !== null) {
             const tabs = this.ext.auto_tiler?.forest.stacks.get(this.stack)?.widgets?.tabs;
             if (tabs && actor.get_next_sibling() === tabs) above = tabs;
         }
@@ -458,7 +467,7 @@ export class ShellWindow {
         const border = this.border;
         if (!border) return;
 
-        const frame = this.meta.get_frame_rect();
+        const frame = this.anim_frame() ?? this.meta.get_frame_rect();
         let { x, y, width, height } = frame;
 
         // Maximized and zero-gap windows draw their border inside the frame.
@@ -562,6 +571,40 @@ export class ShellWindow {
         if (x !== frame.x || y !== frame.y || width !== frame.width || height !== frame.height) {
             this.meta.move_resize_frame(true, x, y, width, height);
         }
+    }
+
+    /**
+     * Makes the border and dim overlay follow `clone` while it animates in
+     * this window's place; `frame` and `buffer` are the window's rectangles
+     * when the clone was made. Null when the animation ends.
+     */
+    follow_clone(clone: Clutter.Actor | null, frame?: Rectangular, buffer?: Rectangular) {
+        this.anim_clone = clone;
+        if (clone && frame && buffer) {
+            this.anim_margins = {
+                x: frame.x - buffer.x,
+                y: frame.y - buffer.y,
+                width: buffer.width - frame.width,
+                height: buffer.height - frame.height,
+            };
+            clone.connect('notify::allocation', () => {
+                if (this.anim_clone === clone) this.update_border_layout();
+            });
+        }
+        this.ext.schedule_border_update();
+    }
+
+    /** The frame rectangle shown by the animation clone, while one runs */
+    private anim_frame(): Rectangular | null {
+        const clone = this.anim_clone;
+        if (!clone) return null;
+        const m = this.anim_margins;
+        return {
+            x: Math.round(clone.x + m.x),
+            y: Math.round(clone.y + m.y),
+            width: Math.round(clone.width - m.width),
+            height: Math.round(clone.height - m.height),
+        };
     }
 
     /** Records that pop-shell is moving this window to `rect` */

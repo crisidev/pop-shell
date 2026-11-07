@@ -80,7 +80,8 @@ export class TileAnimator {
         actor.opacity = 0;
         window.animating = true;
         this.running.set(meta, { window, actor, clone });
-        this.ext.schedule_border_update();
+        // The border and dim overlay ride along with the clone.
+        window.follow_clone(clone, frame, from);
 
         clone.ease({
             ...to,
@@ -96,10 +97,10 @@ export class TileAnimator {
         if (!running) return;
 
         this.running.delete(meta);
+        running.window.follow_clone(null);
         running.clone.destroy();
         running.actor.opacity = 255;
         running.window.animating = false;
-        this.ext.schedule_border_update();
     }
 
     finish_all() {
