@@ -91,8 +91,14 @@ export class PanelHint {
         const s = this.ext.settings;
         border.set_style(new BorderStyle(s.hint_color_rgba(), s.hint_color_end_rgba(), width, radius, scale));
 
+        // Not get_transformed_size(): while a relayout is pending (style-changed,
+        // overview hidden) it falls back to the preferred size, which for the
+        // panel is the full monitor width, ignoring the CSS margins; the
+        // relayout then yields the same allocation, so no notify::allocation
+        // fixes the hint. get_allocation_box() runs the pending relayout first.
+        const alloc = panel.get_allocation_box();
+        const [w, h] = [alloc.get_width(), alloc.get_height()];
         const [x, y] = panel.get_transformed_position();
-        const [w, h] = panel.get_transformed_size();
         const rect = { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) };
         border.set_geometry(rect, rect);
         border.show();
